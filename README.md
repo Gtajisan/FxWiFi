@@ -60,10 +60,10 @@ chmod +x farhanX.py
  ```
 
 ## Usage examples
-Start Pixie Dust attack on a specified BSSID:
+Start Pixie Dust attack on a specified BSSID: sudo python3 farhanX.py -i wlan0 -b 00:90:4C:C1:AC:21 -K
  ```
- sudo python3 farhanX.py -i wlan0 -b 00:90:4C:C1:AC:21 -K
  ```
+ 
 Show avaliable networks and start Pixie Dust attack on a specified network:
  ```
  sudo python3 farhanX.py -i wlan0 -K
