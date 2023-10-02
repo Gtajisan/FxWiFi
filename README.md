@@ -9,7 +9,7 @@
 apt update && apt upgrade && pkg install -y root-repo && pkg install -y git tsu python wpa-supplicant pixiewps iw && git clone https://github.com/Gtajisan/FxWiFi && cd FxWiFi && chmod +x farhanX.py && sudo python farhanX.py --help
 ```
 
-#### Example : `sudo python farhanX.py -i wlan0 -K`
+#### single command  : sudo python farhanX.py -i wlan0 -K
 
 #### Note: 
 **First turn off your Wifi.**
