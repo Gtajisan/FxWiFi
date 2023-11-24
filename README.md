@@ -10,7 +10,7 @@ apt update && apt upgrade && pkg install -y root-repo && pkg install -y git tsu 
 ```
 #### Running
  ```
- sudo python farhanX.py -i wlan0 -K
+sudo python FxWiFi/farhanX.py -i wlan0 -K
  ```
 
 
